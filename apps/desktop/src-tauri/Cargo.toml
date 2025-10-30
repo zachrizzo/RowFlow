@@ -1,0 +1,54 @@
+[package]
+name = "rowflow"
+version = "0.1.0"
+description = "A PostgreSQL database viewer and query tool"
+authors = ["RowFlow Team"]
+edition = "2021"
+
+[lib]
+name = "rowflow_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "rowflow"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.1", features = [] }
+
+[dependencies]
+# Tauri
+tauri = { workspace = true, features = ["macos-private-api", "unstable"] }
+tauri-plugin-shell = { workspace = true }
+tauri-plugin-store = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Database
+tokio-postgres = { workspace = true }
+postgres-native-tls = { workspace = true }
+native-tls = { workspace = true }
+deadpool-postgres = { workspace = true }
+
+# SSH tunnel
+async-ssh2-tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Type sharing
+typeshare = { workspace = true }
+
+# Utilities
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+log = "0.4"
+env_logger = "0.11"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

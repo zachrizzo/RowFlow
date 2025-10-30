@@ -1,0 +1,69 @@
+{
+  "$schema": "https://tauri.app/v2/schema.json",
+  "productName": "RowFlow",
+  "version": "0.1.0",
+  "identifier": "com.rowflow.app",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app"],
+    "icon": [],
+    "publisher": "RowFlow Team",
+    "copyright": "Copyright (c) 2024 RowFlow Team",
+    "category": "DeveloperTool",
+    "shortDescription": "PostgreSQL Database Viewer",
+    "longDescription": "A modern PostgreSQL database viewer and query tool with SSH tunnel support",
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "10.15",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "entitlements": null
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "RowFlow",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 800,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "hiddenTitle": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: https:; connect-src 'self' ws://localhost:* http://localhost:*"
+    },
+    "withGlobalTauri": false,
+    "macOSPrivateApi": true
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    },
+    "store": {
+      "enabled": true
+    }
+  }
+}

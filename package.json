@@ -1,0 +1,39 @@
+{
+  "name": "rowflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Modern PostgreSQL viewer with MCP support",
+  "scripts": {
+    "dev": "pnpm --filter @rowflow/desktop tauri dev",
+    "build": "pnpm build:types && pnpm build:ts && pnpm build:desktop",
+    "build:types": "cd packages/rust-shared && typeshare . --lang=typescript --output-file=../shared/src/generated.ts",
+    "build:rust": "cargo build --release",
+    "build:ts": "pnpm -r --filter='./packages/*' build",
+    "build:desktop": "pnpm --filter @rowflow/desktop tauri build",
+    "lint": "pnpm lint:ts && pnpm lint:rust",
+    "lint:ts": "eslint .",
+    "lint:rust": "cargo clippy --all-targets --all-features -- -D warnings",
+    "format": "pnpm format:ts && pnpm format:rust",
+    "format:ts": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
+    "format:rust": "cargo fmt --all",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,json,md}\" && cargo fmt --all -- --check",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @rowflow/desktop test:e2e"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.0",
+    "@typescript-eslint/parser": "^8.18.0",
+    "eslint": "^9.17.0",
+    "eslint-plugin-react": "^7.37.2",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.6.3"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

@@ -1,0 +1,209 @@
+use serde::{Deserialize, Serialize};
+use typeshare::typeshare;
+
+/// Connection profile for PostgreSQL database
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionProfile {
+    pub id: Option<String>,
+    pub name: String,
+    pub host: String,
+    pub port: u16,
+    pub database: String,
+    pub username: String,
+    pub password: Option<String>,
+    pub use_ssh: bool,
+    pub ssh_config: Option<SshConfig>,
+    pub tls_config: Option<TlsConfig>,
+    pub connection_timeout: Option<u64>, // seconds
+    pub statement_timeout: Option<u64>,  // milliseconds
+    pub lock_timeout: Option<u64>,       // milliseconds
+    pub idle_timeout: Option<u64>,       // seconds
+    pub read_only: bool,
+}
+
+/// SSH tunnel configuration
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SshConfig {
+    pub host: String,
+    pub port: u16,
+    pub username: String,
+    pub password: Option<String>,
+    pub private_key_path: Option<String>,
+    pub passphrase: Option<String>,
+}
+
+/// TLS configuration
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TlsConfig {
+    pub enabled: bool,
+    pub verify_ca: bool,
+    pub ca_cert_path: Option<String>,
+    pub client_cert_path: Option<String>,
+    pub client_key_path: Option<String>,
+}
+
+/// Result of a query execution
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryResult {
+    pub fields: Vec<FieldInfo>,
+    pub rows: Vec<serde_json::Value>,
+    pub row_count: usize,
+    pub execution_time: f64, // milliseconds
+    pub has_more: bool,
+}
+
+/// Information about a query result field
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldInfo {
+    pub name: String,
+    pub type_oid: u32,
+    pub type_name: String,
+    pub nullable: bool,
+}
+
+/// Database connection information
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionInfo {
+    pub connection_id: String,
+    pub server_version: String,
+    pub database_name: String,
+    pub username: String,
+    pub server_encoding: String,
+    pub client_encoding: String,
+    pub is_superuser: bool,
+    pub session_user: String,
+    pub current_schema: String,
+}
+
+/// Database schema information
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Schema {
+    pub name: String,
+    pub owner: String,
+    pub is_system: bool,
+    pub description: Option<String>,
+}
+
+/// Table information
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Table {
+    pub schema: String,
+    pub name: String,
+    pub table_type: String, // BASE TABLE, VIEW, MATERIALIZED VIEW, etc.
+    pub owner: Option<String>,
+    pub row_count: Option<i64>,
+    pub size: Option<String>,
+    pub description: Option<String>,
+}
+
+/// Column information
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Column {
+    pub name: String,
+    pub data_type: String,
+    pub is_nullable: bool,
+    pub column_default: Option<String>,
+    pub character_maximum_length: Option<i32>,
+    pub numeric_precision: Option<i32>,
+    pub numeric_scale: Option<i32>,
+    pub is_primary_key: bool,
+    pub is_unique: bool,
+    pub is_foreign_key: bool,
+    pub foreign_key_table: Option<String>,
+    pub foreign_key_column: Option<String>,
+    pub description: Option<String>,
+}
+
+/// Index information
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Index {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub is_unique: bool,
+    pub is_primary: bool,
+    pub index_type: String, // btree, hash, gist, gin, etc.
+    pub definition: String,
+    pub size: Option<String>,
+}
+
+/// Table statistics
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableStats {
+    pub schema: String,
+    pub table: String,
+    pub row_count: Option<i64>,
+    pub total_size: String,
+    pub table_size: String,
+    pub indexes_size: String,
+    pub toast_size: Option<String>,
+    pub seq_scan: Option<i64>,
+    pub seq_tup_read: Option<i64>,
+    pub idx_scan: Option<i64>,
+    pub idx_tup_fetch: Option<i64>,
+    pub n_tup_ins: Option<i64>,
+    pub n_tup_upd: Option<i64>,
+    pub n_tup_del: Option<i64>,
+    pub n_live_tup: Option<i64>,
+    pub n_dead_tup: Option<i64>,
+    pub last_vacuum: Option<String>,
+    pub last_autovacuum: Option<String>,
+    pub last_analyze: Option<String>,
+    pub last_autoanalyze: Option<String>,
+}
+
+/// Query execution plan
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryPlan {
+    pub plan: serde_json::Value,
+    pub execution_time: Option<f64>,
+    pub planning_time: Option<f64>,
+}
+
+/// Foreign key information
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForeignKey {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub foreign_schema: String,
+    pub foreign_table: String,
+    pub foreign_columns: Vec<String>,
+    pub on_delete: String,
+    pub on_update: String,
+}
+
+/// Constraint information
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Constraint {
+    pub name: String,
+    pub constraint_type: String, // PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
+    pub columns: Vec<String>,
+    pub definition: Option<String>,
+}
