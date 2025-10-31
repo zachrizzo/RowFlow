@@ -81,11 +81,24 @@ export function parseProfilesFromEnv(): Profiles {
   const profileNames = new Set<string>();
 
   // Find all unique profile names from environment variables
+  // Profile name is everything between PG_PROFILE_ and the last _FIELD
+  const knownFields = ['HOST', 'PORT', 'DATABASE', 'USER', 'PASSWORD', 'SSL', 'MAX_CONNECTIONS'];
+
   for (const key in process.env) {
     if (key.startsWith('PG_PROFILE_')) {
-      const match = key.match(/^PG_PROFILE_([^_]+)_/);
-      if (match) {
-        profileNames.add(match[1]);
+      // Remove PG_PROFILE_ prefix
+      const remainder = key.substring('PG_PROFILE_'.length);
+
+      // Check if it ends with a known field
+      for (const field of knownFields) {
+        if (remainder.endsWith(`_${field}`)) {
+          // Extract profile name (everything before _FIELD)
+          const profileName = remainder.substring(0, remainder.length - field.length - 1);
+          if (profileName) {
+            profileNames.add(profileName);
+          }
+          break;
+        }
       }
     }
   }
