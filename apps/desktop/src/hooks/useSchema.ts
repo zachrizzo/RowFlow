@@ -199,6 +199,12 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
 
   // Toggle node expansion
   const toggleNode = useCallback(async (nodeId: string) => {
+    // Don't allow toggle while loading to prevent race conditions
+    if (loading) {
+      console.log('Cannot toggle node while loading');
+      return;
+    }
+
     // Helper to find node recursively - defined inline to avoid dependency issues
     const findNode = (searchNodes: SchemaNode[], id: string): SchemaNode | null => {
       for (const node of searchNodes) {
@@ -231,7 +237,7 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
       setExpandedNodes(prev => new Set(prev).add(nodeId));
 
       // Lazy load children if not loaded
-      if (!node.childrenLoaded) {
+      if (!node.childrenLoaded && !node.isLoading) {
         console.log('Loading children for:', node.name, node.type);
         if (node.type === 'schema' && node.schema) {
           await fetchTables(node.schema);
@@ -240,7 +246,7 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
         }
       }
     }
-  }, [nodes, expandedNodes, fetchTables, fetchColumns]);
+  }, [nodes, expandedNodes, fetchTables, fetchColumns, loading]);
 
   // Expand a specific node
   const expandNode = useCallback((nodeId: string) => {
@@ -266,7 +272,8 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
     if (autoLoad && connectionId) {
       fetchSchemas();
     }
-  }, [connectionId, autoLoad, fetchSchemas]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectionId, autoLoad]); // Remove fetchSchemas to prevent loop
 
   // Calculate filtered nodes
   const filteredNodes = useMemo(() => {
@@ -278,7 +285,7 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
     return calculateStats(nodes);
   }, [nodes]);
 
-  // Auto-expand nodes when searching
+  // Auto-expand nodes when searching (with loop prevention)
   useEffect(() => {
     if (searchQuery.length > 0) {
       // Expand all schema nodes that have matching children
@@ -298,9 +305,15 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
         }
       });
 
-      setExpandedNodes(nodesToExpand);
+      // Only update if the set actually changed (prevent infinite loop)
+      const currentIds = Array.from(expandedNodes).sort().join(',');
+      const newIds = Array.from(nodesToExpand).sort().join(',');
+
+      if (currentIds !== newIds) {
+        setExpandedNodes(nodesToExpand);
+      }
     }
-  }, [searchQuery, filteredNodes]);
+  }, [searchQuery, filteredNodes, expandedNodes]);
 
   return {
     nodes,
