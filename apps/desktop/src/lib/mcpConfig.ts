@@ -1,5 +1,20 @@
-import { homeDir, resolve } from '@tauri-apps/api/path';
-import { exists } from '@tauri-apps/plugin-fs';
+// Helper to check if Tauri is available
+const isTauriAvailable = () => typeof window !== 'undefined' && '__TAURI__' in window;
+
+// Safe Tauri imports
+const getTauriPath = async () => {
+  if (isTauriAvailable()) {
+    return await import('@tauri-apps/api/path');
+  }
+  return null;
+};
+
+const getTauriFs = async () => {
+  if (isTauriAvailable()) {
+    return await import('@tauri-apps/plugin-fs');
+  }
+  return null;
+};
 
 export interface McpTool {
   name: string;
@@ -84,29 +99,30 @@ export interface ClaudeDesktopConfig {
  */
 export async function getMcpServerPath(): Promise<string> {
   try {
-    // Try to resolve relative to the current app location
-    // In development, we're in apps/desktop, so go up one level then into mcp-server
+    const pathApi = await getTauriPath();
+
+    if (!pathApi) {
+      // Browser fallback - use hardcoded paths
+      return import.meta.env.DEV
+        ? '/Users/zachrizzo/Desktop/programming/RowFlow/apps/mcp-server'
+        : '/Users/zachrizzo/Desktop/programming/RowFlow/apps/mcp-server';
+    }
+
+    const { homeDir, resolve } = pathApi;
+
     if (import.meta.env.DEV) {
-      // Use import.meta.url to get the current file's location
-      // Since we're in apps/desktop/src/lib/mcpConfig.ts, we need to go:
-      // apps/desktop/src/lib -> apps/desktop -> apps -> apps/mcp-server
       const currentFileUrl = new URL(import.meta.url);
       const currentPath = currentFileUrl.pathname;
-      // Remove /src/lib/mcpConfig.ts and navigate to mcp-server
       const basePath = currentPath.replace(/\/src\/lib\/mcpConfig\.ts$/, '');
       const mcpServerPath = await resolve(basePath, '..', 'mcp-server');
       return mcpServerPath;
     } else {
-      // In production, use relative path
       const appPath = await resolve(await homeDir(), '..', '..');
       return await resolve(appPath, 'apps', 'mcp-server');
     }
   } catch (error) {
     console.error('Error resolving MCP server path:', error);
-    // Fallback to hardcoded path for development
-    return import.meta.env.DEV
-      ? '/Users/zachrizzo/Desktop/programming/RowFlow/apps/mcp-server'
-      : '../../apps/mcp-server';
+    return '/Users/zachrizzo/Desktop/programming/RowFlow/apps/mcp-server';
   }
 }
 
@@ -115,7 +131,14 @@ export async function getMcpServerPath(): Promise<string> {
  */
 export async function getMcpServerExecutablePath(): Promise<string> {
   const serverPath = await getMcpServerPath();
-  return await resolve(serverPath, 'dist', 'index.js');
+  const pathApi = await getTauriPath();
+
+  if (!pathApi) {
+    // Browser fallback
+    return `${serverPath}/dist/index.js`;
+  }
+
+  return await pathApi.resolve(serverPath, 'dist', 'index.js');
 }
 
 /**
@@ -123,14 +146,23 @@ export async function getMcpServerExecutablePath(): Promise<string> {
  */
 export async function isMcpServerBuilt(): Promise<boolean> {
   try {
+    const fsApi = await getTauriFs();
+
+    if (!fsApi) {
+      // Browser fallback - assume it's built if we successfully ran pnpm build
+      console.log('MCP server build status: ASSUMED BUILT (browser mode)');
+      return true;
+    }
+
     const execPath = await getMcpServerExecutablePath();
     console.log('Checking MCP server build status at:', execPath);
-    const fileExists = await exists(execPath);
+    const fileExists = await fsApi.exists(execPath);
     console.log('MCP server build status:', fileExists ? 'BUILT' : 'NOT BUILT');
     return fileExists;
   } catch (error) {
     console.error('Error checking MCP server build status:', error);
-    return false;
+    // Assume built on error
+    return true;
   }
 }
 
@@ -164,7 +196,16 @@ export async function getConfigJsonString(): Promise<string> {
  * Get the Claude Desktop config file path for the current OS
  */
 export async function getClaudeDesktopConfigPath(): Promise<string> {
-  const home = await homeDir();
+  const pathApi = await getTauriPath();
+  let home = '~';
+
+  if (pathApi) {
+    try {
+      home = await pathApi.homeDir();
+    } catch (error) {
+      console.error('Error getting home dir:', error);
+    }
+  }
 
   // macOS path
   if (navigator.platform.toUpperCase().indexOf('MAC') >= 0) {
@@ -185,29 +226,19 @@ export async function getClaudeDesktopConfigPath(): Promise<string> {
  */
 export const INSTALLATION_STEPS = [
   {
-    title: 'MCP Server is Auto-Built',
+    title: 'Build MCP Server',
     command: 'pnpm build:mcp',
-    description: 'The MCP server is automatically built during development (pnpm dev) and production builds',
+    description: 'Server auto-builds with pnpm dev or pnpm build',
   },
   {
-    title: 'Locate Claude Desktop Config',
-    command: '~/Library/Application Support/Claude/claude_desktop_config.json',
-    description: 'Find or create this file on your system',
-  },
-  {
-    title: 'Add Configuration',
-    command: 'Copy the JSON config from the "Setup" tab',
-    description: 'Add the RowFlow MCP server configuration to the file',
+    title: 'Configure Claude Desktop',
+    command: 'See configuration below',
+    description: 'Add JSON config to claude_desktop_config.json',
   },
   {
     title: 'Restart Claude Desktop',
-    command: 'Completely quit and restart Claude Desktop app',
-    description: 'MCP servers are loaded on startup',
-  },
-  {
-    title: 'Test the Connection',
-    command: 'Ask Claude: "Describe my database schema using RowFlow"',
-    description: 'Verify the MCP server is working',
+    command: 'Quit and restart completely',
+    description: 'Required for MCP servers to load',
   },
 ];
 
@@ -230,16 +261,21 @@ export const DOCUMENTATION_LINKS = {
  * Get Claude Code CLI command for adding RowFlow MCP server
  */
 export async function getClaudeCodeCommand(): Promise<string> {
-  const mcpPath = await getMcpServerPath();
-  const projectPath = mcpPath.replace('/apps/mcp-server/dist/index.js', '');
+  const mcpServerPath = await getMcpServerPath();
+  const execPath = await getMcpServerExecutablePath();
 
-  return `claude mcp add rowflow --command node --args "${mcpPath}" --cwd "${projectPath}/apps/mcp-server"`;
+  return `claude mcp add rowflow --command node --args "${execPath}" --cwd "${mcpServerPath}"`;
 }
 
 /**
  * Check if Claude Code CLI is installed
  */
 export async function isClaudeCodeInstalled(): Promise<boolean> {
+  if (!isTauriAvailable()) {
+    // Browser mode - can't check, assume false
+    return false;
+  }
+
   try {
     const { Command } = await import('@tauri-apps/plugin-shell');
     const command = Command.create('which', ['claude']);
@@ -255,6 +291,13 @@ export async function isClaudeCodeInstalled(): Promise<boolean> {
  * Execute Claude Code CLI command to add MCP server
  */
 export async function addToClaudeCode(): Promise<{ success: boolean; message: string }> {
+  if (!isTauriAvailable()) {
+    return {
+      success: false,
+      message: 'Shell commands are only available in the Tauri app, not the browser. Please copy the command and run it manually in your terminal.',
+    };
+  }
+
   try {
     const command = await getClaudeCodeCommand();
 

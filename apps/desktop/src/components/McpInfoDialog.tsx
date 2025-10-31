@@ -168,21 +168,6 @@ export function McpInfoDialog({ open, onOpenChange }: McpInfoDialogProps) {
     }
   };
 
-  const handleTestConnection = () => {
-    if (!isBuilt) {
-      toast({
-        title: 'Server Not Built',
-        description: 'Please build the MCP server first (see Setup tab)',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    toast({
-      title: 'Connection Test',
-      description: 'To test the MCP server, use it from Claude Desktop after setup',
-    });
-  };
 
   const handleOpenFolder = async () => {
     try {
@@ -312,12 +297,8 @@ export function McpInfoDialog({ open, onOpenChange }: McpInfoDialogProps) {
             </div>
 
             {/* Actions */}
-            <div className="flex gap-2 pt-2">
-              <Button onClick={handleTestConnection} className="flex-1">
-                <CheckCircle2 className="h-4 w-4 mr-2" />
-                Test Connection
-              </Button>
-              <Button variant="outline" onClick={checkServerStatus}>
+            <div className="flex justify-end pt-2">
+              <Button variant="outline" onClick={checkServerStatus} size="sm">
                 <Server className="h-4 w-4 mr-2" />
                 Refresh Status
               </Button>
