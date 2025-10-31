@@ -261,10 +261,9 @@ export const DOCUMENTATION_LINKS = {
  * Get Claude Code CLI command for adding RowFlow MCP server
  */
 export async function getClaudeCodeCommand(): Promise<string> {
-  const mcpServerPath = await getMcpServerPath();
   const execPath = await getMcpServerExecutablePath();
 
-  return `claude mcp add rowflow --command node --args "${execPath}" --cwd "${mcpServerPath}"`;
+  return `claude mcp add --transport stdio rowflow -- node ${execPath}`;
 }
 
 /**
@@ -299,16 +298,13 @@ export async function addToClaudeCode(): Promise<{ success: boolean; message: st
   }
 
   try {
-    const command = await getClaudeCodeCommand();
-
+    const execPath = await getMcpServerExecutablePath();
     const { Command } = await import('@tauri-apps/plugin-shell');
 
-    // Split command into parts
-    const parts = command.split(' ');
-    const cmd = parts[0] || 'claude'; // 'claude'
-    const args = parts.slice(1); // ['mcp', 'add', 'rowflow', ...]
+    // Build args array for: claude mcp add --transport stdio rowflow -- node <path>
+    const args = ['mcp', 'add', '--transport', 'stdio', 'rowflow', '--', 'node', execPath];
 
-    const shellCommand = Command.create(cmd, args);
+    const shellCommand = Command.create('claude', args);
     const output = await shellCommand.execute();
 
     if (output.code === 0) {
