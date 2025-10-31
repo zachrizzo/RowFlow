@@ -337,10 +337,17 @@ async function main(): Promise<void> {
   try {
     log('info', 'Starting RowFlow MCP Server...');
 
+    // Debug: Log environment variables
+    const pgProfileKeys = Object.keys(process.env).filter(k => k.startsWith('PG_PROFILE_'));
+    log('info', `Found ${pgProfileKeys.length} PG_PROFILE_* environment variables`);
+
     // Parse profiles from environment
     const profiles = parseProfilesFromEnv();
+    const profileNames = Object.keys(profiles);
 
-    if (Object.keys(profiles).length === 0) {
+    log('info', `Parsed ${profileNames.length} profiles: ${profileNames.join(', ')}`);
+
+    if (profileNames.length === 0) {
       log('warn', 'No database profiles configured. Database operations will not be available.');
       log('info', 'Set PG_PROFILE_* environment variables to enable database connectivity.');
     } else {
