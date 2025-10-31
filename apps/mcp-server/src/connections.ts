@@ -215,20 +215,28 @@ export async function addConnection(input: AddConnectionInput): Promise<AddConne
       connectionTimeoutMillis: 5000,
     });
 
+    let connectionSuccessful = false;
+    let connectionError: string | null = null;
+
     try {
       const client = await testPool.connect();
       await client.query('SELECT 1');
       client.release();
+      connectionSuccessful = true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      connectionError = errorMessage;
+    } finally {
       await testPool.end();
+    }
+
+    // Check if connection failed
+    if (!connectionSuccessful) {
       return {
         success: false,
         message: 'Connection test failed',
-        error: `Unable to connect to database: ${errorMessage}`,
+        error: `Unable to connect to database: ${connectionError}`,
       };
-    } finally {
-      await testPool.end();
     }
 
     // Get .env file path
