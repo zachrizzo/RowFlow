@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default permissions for RowFlow",
+  "platforms": ["macOS", "windows", "linux"],
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "shell:allow-execute",
+    "store:allow-get",
+    "store:allow-set",
+    "store:allow-save",
+    "store:allow-load",
+    "store:allow-delete",
+    "store:allow-entries",
+    "store:allow-keys",
+    "store:allow-values",
+    "store:default",
+    "fs:allow-read",
+    "fs:allow-exists",
+    "fs:allow-read-text-file",
+    "fs:default"
+  ]
+}

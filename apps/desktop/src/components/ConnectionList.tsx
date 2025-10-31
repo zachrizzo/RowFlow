@@ -61,13 +61,19 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
       username: profile.username,
       password: profile.password,
       readOnly: profile.readOnly,
-      useSsh: profile.useSsh,
-      sshConfig: profile.sshConfig,
-      tlsConfig: profile.tlsConfig,
-      connectionTimeout: profile.connectionTimeout,
-      statementTimeout: profile.statementTimeout,
-      lockTimeout: profile.lockTimeout,
-      idleTimeout: profile.idleTimeout,
+      useSsh: !!profile.sshTunnel,
+      sshConfig: profile.sshTunnel,
+      tlsConfig: profile.ssl?.enabled ? {
+        enabled: true,
+        verifyCa: false,
+        caCertPath: undefined,
+        clientCertPath: undefined,
+        clientKeyPath: undefined,
+      } : undefined,
+      connectionTimeout: profile.timeouts?.idle,
+      statementTimeout: profile.timeouts?.statement,
+      lockTimeout: profile.timeouts?.lock,
+      idleTimeout: profile.timeouts?.idle,
     });
     setConnectingProfileId(null);
   };

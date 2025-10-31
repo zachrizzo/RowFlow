@@ -363,11 +363,14 @@ pub async fn list_mcp_profiles() -> Result<Vec<ConnectionProfile>> {
     use std::collections::HashMap;
 
     // Get MCP server .env file path
-    // Assumes structure: apps/desktop (current) -> apps/mcp-server/.env
+    // CARGO_MANIFEST_DIR = .../apps/desktop/src-tauri
+    // parent = .../apps/desktop
+    // parent = .../apps
+    // join mcp-server = .../apps/mcp-server
     let mcp_env_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
-        .map(|p| p.join("apps").join("mcp-server").join(".env"))
+        .map(|p| p.join("mcp-server").join(".env"))
         .ok_or_else(|| crate::error::RowFlowError::InternalError("Failed to resolve MCP server path".to_string()))?;
 
     log::info!("Reading MCP profiles from: {:?}", mcp_env_path);
