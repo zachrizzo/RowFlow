@@ -197,10 +197,25 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
     await fetchSchemas();
   }, [connectionId, fetchSchemas]);
 
+  // Helper function to find a node by ID recursively
+  const findNodeById = useCallback((nodes: SchemaNode[], id: string): SchemaNode | null => {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      if (node.children) {
+        const found = findNodeById(node.children, id);
+        if (found) return found;
+      }
+    }
+    return null;
+  }, []);
+
   // Toggle node expansion
   const toggleNode = useCallback(async (nodeId: string) => {
-    const node = nodes.find(n => findNodeById(n, nodeId));
-    if (!node) return;
+    const node = findNodeById(nodes, nodeId);
+    if (!node) {
+      console.log('Node not found:', nodeId);
+      return;
+    }
 
     const isExpanded = expandedNodes.has(nodeId);
 
@@ -217,6 +232,7 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
 
       // Lazy load children if not loaded
       if (!node.childrenLoaded) {
+        console.log('Loading children for:', node.name, node.type);
         if (node.type === 'schema' && node.schema) {
           await fetchTables(node.schema);
         } else if ((node.type === 'table' || node.type === 'view') && node.schema && node.table) {
@@ -224,19 +240,7 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
         }
       }
     }
-  }, [nodes, expandedNodes, fetchTables, fetchColumns]);
-
-  // Helper function to find a node by ID
-  function findNodeById(node: SchemaNode, id: string): SchemaNode | null {
-    if (node.id === id) return node;
-    if (node.children) {
-      for (const child of node.children) {
-        const found = findNodeById(child, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }
+  }, [nodes, expandedNodes, fetchTables, fetchColumns, findNodeById]);
 
   // Expand a specific node
   const expandNode = useCallback((nodeId: string) => {
