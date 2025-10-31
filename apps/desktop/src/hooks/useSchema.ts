@@ -197,21 +197,21 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
     await fetchSchemas();
   }, [connectionId, fetchSchemas]);
 
-  // Helper function to find a node by ID recursively
-  const findNodeById = useCallback((nodes: SchemaNode[], id: string): SchemaNode | null => {
-    for (const node of nodes) {
-      if (node.id === id) return node;
-      if (node.children) {
-        const found = findNodeById(node.children, id);
-        if (found) return found;
-      }
-    }
-    return null;
-  }, []);
-
   // Toggle node expansion
   const toggleNode = useCallback(async (nodeId: string) => {
-    const node = findNodeById(nodes, nodeId);
+    // Helper to find node recursively - defined inline to avoid dependency issues
+    const findNode = (searchNodes: SchemaNode[], id: string): SchemaNode | null => {
+      for (const node of searchNodes) {
+        if (node.id === id) return node;
+        if (node.children) {
+          const found = findNode(node.children, id);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const node = findNode(nodes, nodeId);
     if (!node) {
       console.log('Node not found:', nodeId);
       return;
@@ -240,7 +240,7 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
         }
       }
     }
-  }, [nodes, expandedNodes, fetchTables, fetchColumns, findNodeById]);
+  }, [nodes, expandedNodes, fetchTables, fetchColumns]);
 
   // Expand a specific node
   const expandNode = useCallback((nodeId: string) => {
