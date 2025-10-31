@@ -355,3 +355,101 @@ fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type: &Type) -> 
             .unwrap_or(Value::Null),
     }
 }
+
+/// List connection profiles from MCP server .env file
+#[tauri::command]
+pub async fn list_mcp_profiles() -> Result<Vec<ConnectionProfile>> {
+    use std::fs;
+    use std::collections::HashMap;
+
+    // Get MCP server .env file path
+    // Assumes structure: apps/desktop (current) -> apps/mcp-server/.env
+    let mcp_env_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("apps").join("mcp-server").join(".env"))
+        .ok_or_else(|| crate::error::RowFlowError::InternalError("Failed to resolve MCP server path".to_string()))?;
+
+    log::info!("Reading MCP profiles from: {:?}", mcp_env_path);
+
+    // Read .env file
+    let env_content = fs::read_to_string(&mcp_env_path)?;
+
+    // Parse PG_PROFILE_* variables
+    let mut profile_data: HashMap<String, HashMap<String, String>> = HashMap::new();
+
+    for line in env_content.lines() {
+        let line = line.trim();
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+
+        if let Some((key, value)) = line.split_once('=') {
+            let key = key.trim();
+            let value = value.trim();
+
+            if key.starts_with("PG_PROFILE_") {
+                // Parse: PG_PROFILE_NAME_FIELD
+                let remainder = &key["PG_PROFILE_".len()..];
+
+                // Find the field name (HOST, PORT, etc.)
+                let known_fields = ["HOST", "PORT", "DATABASE", "USER", "PASSWORD", "SSL", "MAX_CONNECTIONS"];
+                for field in &known_fields {
+                    if remainder.ends_with(&format!("_{}", field)) {
+                        let profile_name = &remainder[..remainder.len() - field.len() - 1];
+                        profile_data.entry(profile_name.to_string())
+                            .or_insert_with(HashMap::new)
+                            .insert(field.to_string(), value.to_string());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Convert to ConnectionProfile structs
+    let mut profiles = Vec::new();
+
+    for (name, data) in profile_data {
+        if let (Some(host), Some(port), Some(database), Some(user), Some(password)) = (
+            data.get("HOST"),
+            data.get("PORT"),
+            data.get("DATABASE"),
+            data.get("USER"),
+            data.get("PASSWORD"),
+        ) {
+            let ssl_enabled = data.get("SSL").map(|s| s == "true").unwrap_or(false);
+
+            profiles.push(ConnectionProfile {
+                id: None,
+                name: name.to_lowercase(),
+                host: host.clone(),
+                port: port.parse().unwrap_or(5432),
+                database: database.clone(),
+                username: user.clone(),
+                password: Some(password.clone()),
+                use_ssh: false,
+                ssh_config: None,
+                tls_config: if ssl_enabled {
+                    Some(crate::types::TlsConfig {
+                        enabled: true,
+                        verify_ca: false,
+                        ca_cert_path: None,
+                        client_cert_path: None,
+                        client_key_path: None,
+                    })
+                } else {
+                    None
+                },
+                connection_timeout: None,
+                statement_timeout: None,
+                lock_timeout: None,
+                idle_timeout: None,
+                read_only: false,
+            });
+        }
+    }
+
+    log::info!("Found {} MCP profiles", profiles.len());
+    Ok(profiles)
+}

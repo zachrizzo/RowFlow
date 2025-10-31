@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -164,12 +165,17 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
 
                       {/* Additional Info */}
                       <div className="flex items-center gap-2 mt-1">
-                        {profile.useSsh && (
+                        {profile.isMcpManaged && (
+                          <span className="text-xs px-1.5 py-0.5 bg-blue-500/10 text-blue-500 rounded font-medium">
+                            MCP
+                          </span>
+                        )}
+                        {profile.sshTunnel && (
                           <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
                             SSH
                           </span>
                         )}
-                        {profile.tlsConfig?.enabled && (
+                        {profile.ssl?.enabled && (
                           <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
                             SSL
                           </span>
@@ -205,20 +211,30 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
                             Connect
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem
-                          onClick={() => onEditProfile?.(profile)}
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={() => setDeletingProfileId(profile.id)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
+                        {!profile.isMcpManaged && (
+                          <>
+                            <DropdownMenuItem
+                              onClick={() => onEditProfile?.(profile)}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={() => setDeletingProfileId(profile.id)}
+                              className="text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        {profile.isMcpManaged && (
+                          <DropdownMenuItem disabled>
+                            <Info className="mr-2 h-4 w-4" />
+                            MCP-managed (read-only)
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>

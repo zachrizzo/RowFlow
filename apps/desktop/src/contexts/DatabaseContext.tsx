@@ -55,8 +55,44 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
   // Load profiles on mount
   const loadProfiles = useCallback(async () => {
     try {
+      // Load local profiles from Tauri Store
       const loadedProfiles = await getProfiles();
-      setProfiles(loadedProfiles);
+
+      // Load MCP profiles from .env file
+      let mcpProfiles: StoredProfile[] = [];
+      try {
+        const mcpProfilesRaw = await invoke<ConnectionProfile[]>('list_mcp_profiles');
+        // Convert to StoredProfile format and mark as MCP-managed
+        mcpProfiles = mcpProfilesRaw.map((profile) => ({
+          id: `mcp-${profile.name}`,
+          name: `${profile.name} (MCP)`,
+          host: profile.host,
+          port: profile.port,
+          database: profile.database,
+          username: profile.username,
+          password: profile.password,
+          readOnly: profile.read_only,
+          ssl: {
+            enabled: !!profile.ssl_mode,
+            mode: profile.ssl_mode as any,
+          },
+          timeouts: {
+            statement: profile.statement_timeout,
+            lock: profile.lock_timeout,
+            idle: profile.idle_timeout,
+          },
+          sshTunnel: profile.ssh_tunnel,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          isMcpManaged: true,
+        }));
+      } catch (error) {
+        console.log('No MCP profiles found or MCP server not configured:', error);
+      }
+
+      // Merge local and MCP profiles
+      const allProfiles = [...loadedProfiles, ...mcpProfiles];
+      setProfiles(allProfiles);
 
       // Load active profile ID
       const activeId = await getActiveProfileId();

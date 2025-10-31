@@ -115,14 +115,18 @@ export interface StoredProfile {
   database: string;
   username: string;
   password?: string; // Encrypted or plain - user warning needed
-  useSsh: boolean;
-  sshConfig?: SshConfig;
-  tlsConfig?: TlsConfig;
-  connectionTimeout?: number;
-  statementTimeout?: number;
-  lockTimeout?: number;
-  idleTimeout?: number;
   readOnly: boolean;
-  createdAt: number;
-  updatedAt: number;
+  ssl?: {
+    enabled: boolean;
+    mode?: string;
+  };
+  timeouts?: {
+    statement?: number;
+    lock?: number;
+    idle?: number;
+  };
+  sshTunnel?: SshConfig;
+  createdAt: string;
+  updatedAt: string;
+  isMcpManaged?: boolean; // True if managed by MCP server
 }

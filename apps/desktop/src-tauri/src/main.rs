@@ -32,6 +32,7 @@ fn main() {
             rowflow_lib::commands::database::execute_query_stream,
             rowflow_lib::commands::database::cancel_query,
             rowflow_lib::commands::database::get_backend_pid,
+            rowflow_lib::commands::database::list_mcp_profiles,
             // Schema introspection commands
             rowflow_lib::commands::schema::list_schemas,
             rowflow_lib::commands::schema::list_tables,
