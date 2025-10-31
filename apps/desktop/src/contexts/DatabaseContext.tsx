@@ -62,6 +62,8 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
       let mcpProfiles: StoredProfile[] = [];
       try {
         const mcpProfilesRaw = await invoke<ConnectionProfile[]>('list_mcp_profiles');
+        console.log('Loaded MCP profiles:', mcpProfilesRaw);
+
         // Convert to StoredProfile format and mark as MCP-managed
         mcpProfiles = mcpProfilesRaw.map((profile) => ({
           id: `mcp-${profile.name}`,
@@ -71,17 +73,17 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
           database: profile.database,
           username: profile.username,
           password: profile.password,
-          readOnly: profile.read_only,
+          readOnly: profile.readOnly,
           ssl: {
-            enabled: !!profile.ssl_mode,
-            mode: profile.ssl_mode as any,
+            enabled: profile.tlsConfig?.enabled || false,
+            mode: profile.tlsConfig?.enabled ? 'require' : undefined,
           },
           timeouts: {
-            statement: profile.statement_timeout,
-            lock: profile.lock_timeout,
-            idle: profile.idle_timeout,
+            statement: profile.statementTimeout,
+            lock: profile.lockTimeout,
+            idle: profile.idleTimeout,
           },
-          sshTunnel: profile.ssh_tunnel,
+          sshTunnel: profile.sshConfig,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           isMcpManaged: true,
