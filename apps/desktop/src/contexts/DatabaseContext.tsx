@@ -113,7 +113,8 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
 
   useEffect(() => {
     loadProfiles();
-  }, [loadProfiles]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only load on mount
 
   // Test connection without saving
   const testConnection = useCallback(async (profile: ConnectionProfile): Promise<ConnectionInfo | null> => {
