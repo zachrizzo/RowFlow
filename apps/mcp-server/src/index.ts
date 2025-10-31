@@ -19,6 +19,9 @@ import { handleExplain } from './tools/explain.js';
 import { handleSample } from './tools/sample.js';
 import { handleLocks } from './tools/locks.js';
 import { handleCancel } from './tools/cancel.js';
+import { handleConnectionList } from './tools/connection-list.js';
+import { handleConnectionAdd } from './tools/connection-add.js';
+import { handleConnectionTest } from './tools/connection-test.js';
 
 // Load environment variables
 dotenv.config();
@@ -161,6 +164,72 @@ const TOOLS = [
       required: ['profile', 'pid'],
     },
   },
+  {
+    name: 'pg.connection.list',
+    description: 'List all available connection profiles with their details (passwords excluded). Shows profile names and connection information.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
+  {
+    name: 'pg.connection.add',
+    description: 'Add a new connection profile to the .env file. The profile will be available after restarting the MCP server. Connection is tested before adding.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Profile name (alphanumeric, will be converted to uppercase)',
+        },
+        host: {
+          type: 'string',
+          description: 'Database host (e.g., localhost, db.example.com)',
+        },
+        port: {
+          type: 'number',
+          description: 'Database port (default: 5432)',
+          default: 5432,
+        },
+        database: {
+          type: 'string',
+          description: 'Database name',
+        },
+        user: {
+          type: 'string',
+          description: 'Database user',
+        },
+        password: {
+          type: 'string',
+          description: 'Database password (WARNING: stored in plain text in .env)',
+        },
+        ssl: {
+          type: 'boolean',
+          description: 'Enable SSL connection (default: false)',
+          default: false,
+        },
+        maxConnections: {
+          type: 'number',
+          description: 'Maximum pool connections (optional, default: 10)',
+        },
+      },
+      required: ['name', 'host', 'database', 'user', 'password'],
+    },
+  },
+  {
+    name: 'pg.connection.test',
+    description: 'Test a connection profile to verify connectivity and retrieve server information. Returns PostgreSQL version, current database, user, and encoding.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        profile: {
+          type: 'string',
+          description: 'Connection profile name to test',
+        },
+      },
+      required: ['profile'],
+    },
+  },
 ];
 
 // List tools handler
@@ -202,6 +271,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'pg.cancel':
         result = await handleCancel(args as any);
+        break;
+
+      case 'pg.connection.list':
+        result = await handleConnectionList(args as any);
+        break;
+
+      case 'pg.connection.add':
+        result = await handleConnectionAdd(args as any);
+        break;
+
+      case 'pg.connection.test':
+        result = await handleConnectionTest(args as any);
         break;
 
       default:
@@ -260,14 +341,13 @@ async function main(): Promise<void> {
     const profiles = parseProfilesFromEnv();
 
     if (Object.keys(profiles).length === 0) {
-      log('error', 'No database profiles configured. Please set PG_PROFILE_* environment variables.');
-      process.exit(1);
+      log('warn', 'No database profiles configured. Database operations will not be available.');
+      log('info', 'Set PG_PROFILE_* environment variables to enable database connectivity.');
+    } else {
+      // Initialize database manager
+      dbManager.initialize(profiles);
+      log('info', `Configured profiles: ${dbManager.getAvailableProfiles().join(', ')}`);
     }
-
-    // Initialize database manager
-    dbManager.initialize(profiles);
-
-    log('info', `Configured profiles: ${dbManager.getAvailableProfiles().join(', ')}`);
 
     // Start MCP server with stdio transport
     const transport = new StdioServerTransport();

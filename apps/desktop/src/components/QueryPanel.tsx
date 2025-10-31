@@ -1,5 +1,5 @@
 import { useEffect, useCallback } from 'react';
-import { Play, Square, Zap, Database, Loader2 } from 'lucide-react';
+import { Play, Square, Zap, Database, Loader2, X } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -8,6 +8,7 @@ import { ResultsGrid } from './ResultsGrid';
 import { QueryTabs, useQueryTabs } from './QueryTabs';
 import { useQueryExecution } from '@/hooks/useQueryExecution';
 import { useDatabase } from '@/hooks/useDatabase';
+import { DEFAULT_SQL, sanitizeSql, isDefaultSql } from '@/lib/sqlPlaceholders';
 
 export interface QueryPanelProps {
   onSqlInsert?: (callback: (sql: string) => void) => void;
@@ -56,10 +57,22 @@ export function QueryPanel({ onSqlInsert }: QueryPanelProps) {
   // Expose insertSql function via ref (for schema browser integration)
   const insertSql = useCallback(
     (sql: string) => {
-      if (activeTab) {
-        const newSql = activeTab.sql + (activeTab.sql ? '\n' : '') + sql;
-        updateTabSql(activeTab.id, newSql);
-      }
+      if (!activeTab) return;
+
+      const existingSql = sanitizeSql(activeTab.sql);
+      const insertSqlText = sanitizeSql(sql).trim();
+
+      if (!insertSqlText) return;
+
+      const shouldReplace = !existingSql || isDefaultSql(existingSql);
+      const baseSql = shouldReplace ? '' : existingSql.trimEnd();
+
+      const combinedSql = [baseSql, insertSqlText]
+        .filter(Boolean)
+        .join('\n')
+        .trim();
+
+      updateTabSql(activeTab.id, combinedSql.length > 0 ? combinedSql : DEFAULT_SQL);
     },
     [activeTab, updateTabSql]
   );
@@ -104,6 +117,12 @@ export function QueryPanel({ onSqlInsert }: QueryPanelProps) {
     const formatted = formatQuery(activeTab.sql);
     updateTabSql(activeTab.id, formatted);
   }, [activeTab, formatQuery, updateTabSql]);
+
+  // Handle clearing the query
+  const handleClear = useCallback(() => {
+    if (!activeTab) return;
+    updateTabSql(activeTab.id, DEFAULT_SQL);
+  }, [activeTab, updateTabSql]);
 
   // Handle SQL editor changes
   const handleSqlChange = useCallback(
@@ -195,6 +214,18 @@ export function QueryPanel({ onSqlInsert }: QueryPanelProps) {
             Format
           </Button>
 
+          {/* Clear button */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleClear}
+            disabled={!activeTab.sql.trim() || isDefaultSql(activeTab.sql)}
+            title="Clear Query"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Clear
+          </Button>
+
           {/* Connection indicator */}
           {hasConnection ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground ml-4">
@@ -231,7 +262,7 @@ export function QueryPanel({ onSqlInsert }: QueryPanelProps) {
         <Panel defaultSize={50} minSize={20}>
           <div className="h-full">
             <SqlEditor
-              value={activeTab.sql}
+              value={activeTab.sql || ''}
               onChange={handleSqlChange}
               onExecute={handleExecute}
               onFormat={handleFormat}

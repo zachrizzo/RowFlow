@@ -57,6 +57,12 @@ const shortcuts: ShortcutItem[] = [
       { keys: '⌘C / Ctrl+C', description: 'Copy results' },
     ],
   },
+  {
+    category: 'Help',
+    shortcuts: [
+      { keys: '⇧⌘M / Shift+Ctrl+M', description: 'Show MCP Server info' },
+    ],
+  },
 ];
 
 interface KeyboardShortcutsDialogProps {

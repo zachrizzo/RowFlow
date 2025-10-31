@@ -17,10 +17,13 @@ import {
   Keyboard,
   Clock,
   Trash2,
+  Server,
+  Settings as SettingsIcon,
 } from 'lucide-react';
 import { useCommands } from '@/contexts/CommandContext';
 import { DatabaseContext } from '@/contexts/DatabaseContext';
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
+import { McpInfoDialog } from './McpInfoDialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Command } from '@/lib/commands';
@@ -35,7 +38,11 @@ const categoryColors = {
   help: 'text-pink-400',
 };
 
-export function CommandPalette() {
+export interface CommandPaletteProps {
+  onOpenSettings?: () => void;
+}
+
+export function CommandPalette({ onOpenSettings }: CommandPaletteProps = {}) {
   const {
     isOpen,
     closeCommandPalette,
@@ -50,6 +57,7 @@ export function CommandPalette() {
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showMcpInfo, setShowMcpInfo] = useState(false);
 
   // Get all available commands
   const commands = useMemo(() => getAvailableCommands(), [getAvailableCommands]);
@@ -372,6 +380,18 @@ export function CommandPalette() {
           });
         },
       },
+      {
+        id: 'open-settings',
+        label: 'Open Settings',
+        description: 'Open application settings',
+        icon: SettingsIcon,
+        category: 'view' as const,
+        shortcut: ['⌘', ','],
+        action: () => {
+          closeCommandPalette();
+          onOpenSettings?.();
+        },
+      },
 
       // Navigation Commands
       {
@@ -430,6 +450,17 @@ export function CommandPalette() {
         },
       },
       {
+        id: 'show-mcp-info',
+        label: 'Show MCP Server Info',
+        description: 'View MCP server details and setup',
+        icon: Server,
+        category: 'help' as const,
+        shortcut: ['⇧', '⌘', 'M'],
+        action: () => {
+          setShowMcpInfo(true);
+        },
+      },
+      {
         id: 'clear-recent',
         label: 'Clear Recent Commands',
         description: 'Clear command history',
@@ -460,7 +491,7 @@ export function CommandPalette() {
     });
 
     registerCommands(allCommands);
-  }, [databaseContext, registerCommands, toast, clearRecentCommands]);
+  }, [databaseContext, registerCommands, toast, clearRecentCommands, closeCommandPalette, onOpenSettings]);
 
   const handleSelect = useCallback(
     (commandId: string) => {
@@ -631,6 +662,7 @@ export function CommandPalette() {
       </CommandPrimitive.Dialog>
 
       <KeyboardShortcutsDialog open={showShortcuts} onOpenChange={setShowShortcuts} />
+      <McpInfoDialog open={showMcpInfo} onOpenChange={setShowMcpInfo} />
     </>
   );
 }

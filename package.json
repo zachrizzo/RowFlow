@@ -5,8 +5,9 @@
   "type": "module",
   "description": "Modern PostgreSQL viewer with MCP support",
   "scripts": {
-    "dev": "pnpm --filter @rowflow/desktop tauri dev",
-    "build": "pnpm build:types && pnpm build:ts && pnpm build:desktop",
+    "dev": "lsof -ti:1420 | xargs kill -9 2>/dev/null || true && pnpm build:mcp && pnpm --filter @rowflow/desktop tauri dev",
+    "build": "pnpm build:mcp && pnpm build:desktop",
+    "build:mcp": "pnpm --filter @rowflow/mcp-server build",
     "build:types": "cd packages/rust-shared && typeshare . --lang=typescript --output-file=../shared/src/generated.ts",
     "build:rust": "cargo build --release",
     "build:ts": "pnpm -r --filter='./packages/*' build",

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useMemo, useCallback, useEffect } from 'react';
 import Editor, { Monaco, type OnMount } from '@monaco-editor/react';
 
 export interface SqlEditorProps {
@@ -21,7 +21,63 @@ export function SqlEditor({
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<Monaco | null>(null);
 
-  const handleEditorDidMount: OnMount = (editor, monaco) => {
+  // Store callbacks in refs to avoid stale closures
+  const onExecuteRef = useRef(onExecute);
+  const onFormatRef = useRef(onFormat);
+
+  useEffect(() => {
+    onExecuteRef.current = onExecute;
+    onFormatRef.current = onFormat;
+  }, [onExecute, onFormat]);
+
+  // Memoize editor options to prevent recreation on every render
+  const editorOptions = useMemo(
+    () => ({
+      minimap: {
+        enabled: true,
+      },
+      lineNumbers: 'on' as const,
+      roundedSelection: true,
+      scrollBeyondLastLine: false,
+      readOnly,
+      automaticLayout: true,
+      fontSize: 14,
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+      fontLigatures: true,
+      cursorStyle: 'line' as const,
+      cursorBlinking: 'smooth' as const,
+      renderWhitespace: 'selection' as const,
+      renderLineHighlight: 'all' as const,
+      suggest: {
+        showKeywords: true,
+        showSnippets: true,
+      },
+      acceptSuggestionOnEnter: 'on' as const,
+      tabCompletion: 'on' as const,
+      quickSuggestions: {
+        other: true,
+        comments: false,
+        strings: false,
+      },
+      parameterHints: {
+        enabled: true,
+      },
+      folding: true,
+      foldingStrategy: 'indentation' as const,
+      showFoldingControls: 'always' as const,
+      bracketPairColorization: {
+        enabled: true,
+      },
+      padding: {
+        top: 16,
+        bottom: 16,
+      },
+    }),
+    [readOnly]
+  );
+
+  // Use useCallback for mount handler with empty deps since we use refs
+  const handleEditorDidMount: OnMount = useCallback((editor, monaco) => {
     editorRef.current = editor;
     monacoRef.current = monaco;
 
@@ -60,15 +116,15 @@ export function SqlEditor({
       },
     });
 
-    // Add custom keyboard shortcuts
+    // Add custom keyboard shortcuts using refs to avoid stale closures
     // Cmd/Ctrl + Enter: Execute query
     editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter, () => {
-      onExecute?.();
+      onExecuteRef.current?.();
     });
 
     // Alt/Option + Cmd/Ctrl + F: Format SQL
     editor.addCommand(monaco.KeyMod.Alt | monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyF, () => {
-      onFormat?.();
+      onFormatRef.current?.();
     });
 
     // Cmd/Ctrl + K: Open command palette
@@ -78,61 +134,19 @@ export function SqlEditor({
 
     // Focus the editor
     editor.focus();
-  };
+  }, []);
 
-  function handleEditorChange(value: string | undefined) {
+  // Use useCallback for editor change handler
+  const handleEditorChange = useCallback((value: string | undefined) => {
     onChange?.(value || '');
-  }
-
-  // Define editor options
-  const editorOptions = {
-    minimap: {
-      enabled: true,
-    },
-    lineNumbers: 'on' as const,
-    roundedSelection: true,
-    scrollBeyondLastLine: false,
-    readOnly,
-    automaticLayout: true,
-    fontSize: 14,
-    fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
-    fontLigatures: true,
-    cursorStyle: 'line' as const,
-    cursorBlinking: 'smooth' as const,
-    renderWhitespace: 'selection' as const,
-    renderLineHighlight: 'all' as const,
-    suggest: {
-      showKeywords: true,
-      showSnippets: true,
-    },
-    acceptSuggestionOnEnter: 'on' as const,
-    tabCompletion: 'on' as const,
-    quickSuggestions: {
-      other: true,
-      comments: false,
-      strings: false,
-    },
-    parameterHints: {
-      enabled: true,
-    },
-    folding: true,
-    foldingStrategy: 'indentation' as const,
-    showFoldingControls: 'always' as const,
-    bracketPairColorization: {
-      enabled: true,
-    },
-    padding: {
-      top: 16,
-      bottom: 16,
-    },
-  };
+  }, [onChange]);
 
   return (
     <div className="w-full h-full">
       <Editor
         height={height}
         defaultLanguage="sql"
-        value={value}
+        value={value || ''}
         onChange={handleEditorChange}
         onMount={handleEditorDidMount}
         theme="vs-dark"

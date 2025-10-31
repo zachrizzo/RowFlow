@@ -2,10 +2,10 @@
   "$schema": "https://tauri.app/v2/schema.json",
   "productName": "RowFlow",
   "version": "0.1.0",
-  "identifier": "com.rowflow.app",
+  "identifier": "com.rowflow.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
@@ -61,9 +61,6 @@
   "plugins": {
     "shell": {
       "open": true
-    },
-    "store": {
-      "enabled": true
     }
   }
 }

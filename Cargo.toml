@@ -10,6 +10,7 @@ resolver = "2"
 tauri = { version = "2.1", features = [] }
 tauri-plugin-shell = "2.1"
 tauri-plugin-store = "2.4"
+tauri-plugin-fs = "2.1"
 
 # Async runtime
 tokio = { version = "1.42", features = ["full"] }

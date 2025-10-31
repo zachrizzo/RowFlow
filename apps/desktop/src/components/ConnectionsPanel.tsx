@@ -49,7 +49,13 @@ export function ConnectionsPanel() {
               <Database className="h-5 w-5" />
               <h2 className="font-semibold">Connections</h2>
             </div>
-            <Button size="icon" variant="ghost" onClick={handleNewConnection}>
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={handleNewConnection}
+              className="h-8 w-8"
+              title="Add Connection"
+            >
               <Plus className="h-4 w-4" />
             </Button>
           </div>

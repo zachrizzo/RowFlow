@@ -13,8 +13,8 @@
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\"",
     "test": "vitest",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:dev": "pnpm --filter @rowflow/mcp-server build && tauri dev",
+    "tauri:build": "pnpm --filter @rowflow/mcp-server build && tauri build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -30,10 +30,13 @@
     "@radix-ui/react-separator": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-switch": "^1.2.6",
+    "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-toast": "^1.2.15",
     "@tanstack/react-table": "^8.20.5",
     "@tanstack/react-virtual": "^3.10.8",
     "@tauri-apps/api": "^2.1.0",
+    "@tauri-apps/plugin-fs": "^2.4.4",
+    "@tauri-apps/plugin-shell": "^2.3.3",
     "@tauri-apps/plugin-store": "^2.1.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

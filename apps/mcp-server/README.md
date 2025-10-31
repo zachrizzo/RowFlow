@@ -418,9 +418,30 @@ npm install
 # Build
 npm run build
 
-# Test with stdio transport
+# Run automated test script
+./test-connection.sh
+
+# Or test manually with stdio transport
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | node dist/index.js
 ```
+
+### Adding to Claude Code CLI
+
+The easiest way to use this MCP server with Claude Code is via the CLI:
+
+```bash
+claude mcp add rowflow --command node --args "/Users/zachrizzo/Desktop/programming/RowFlow/apps/mcp-server/dist/index.js" --cwd "/Users/zachrizzo/Desktop/programming/RowFlow/apps/mcp-server"
+```
+
+Replace the paths with your actual project location.
+
+**Or use the RowFlow Desktop App:**
+1. Open RowFlow desktop app
+2. Click the "MCP" badge in the Connections panel
+3. Go to the "Setup" tab
+4. Click "Copy Command" under Claude Code section
+5. Run the command in your terminal
+6. Restart Claude Code
 
 ## Next Steps
 

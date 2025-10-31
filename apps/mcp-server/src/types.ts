@@ -52,6 +52,26 @@ export interface CancelInput {
   pid: number;
 }
 
+// Connection Management Input Types
+export interface ConnectionListInput {
+  // No parameters needed
+}
+
+export interface ConnectionAddInput {
+  name: string;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  password: string;
+  ssl?: boolean;
+  maxConnections?: number;
+}
+
+export interface ConnectionTestInput {
+  profile: string;
+}
+
 // Tool Output Types
 export interface SchemaInfo {
   schemaName: string;
@@ -124,6 +144,44 @@ export interface LocksOutput {
 export interface CancelOutput {
   success: boolean;
   message: string;
+}
+
+// Connection Management Output Types
+export interface ConnectionInfo {
+  name: string;
+  host: string;
+  port: number;
+  database: string;
+  user: string;
+  ssl: boolean;
+  maxConnections?: number;
+}
+
+export interface ConnectionListOutput {
+  connections: ConnectionInfo[];
+  count: number;
+}
+
+export interface ConnectionAddOutput {
+  success: boolean;
+  message: string;
+  profileName?: string;
+  instructions?: string[];
+  error?: string;
+}
+
+export interface ConnectionTestOutput {
+  success: boolean;
+  message: string;
+  serverVersion?: string;
+  serverInfo?: {
+    version: string;
+    uptime?: string;
+    currentDatabase: string;
+    currentUser: string;
+    serverEncoding: string;
+  };
+  error?: string;
 }
 
 // MCP Error

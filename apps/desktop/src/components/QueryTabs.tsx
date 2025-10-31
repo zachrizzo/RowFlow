@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import type { QueryTab } from '@/types/query';
+import { DEFAULT_SQL, sanitizeSql } from '@/lib/sqlPlaceholders';
 
 export interface QueryTabsProps {
   tabs: QueryTab[];
@@ -165,10 +166,36 @@ export function useQueryTabs() {
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        setTabs(parsed.tabs);
+        // Check if data is corrupted (tabs have undefined or null sql)
+        const hasCorruptedData = parsed.tabs?.some(
+          (tab: any) => tab.sql === undefined || tab.sql === null
+        );
+
+        if (hasCorruptedData) {
+          console.warn('Corrupted localStorage data detected, clearing and creating fresh tab');
+          localStorage.removeItem('rowflow-query-tabs');
+          createInitialTab();
+          return;
+        }
+
+        // Ensure all tabs have valid sql property
+        const validTabs = parsed.tabs.map((tab: QueryTab) => {
+          const sanitizedSql = sanitizeSql(tab.sql);
+          const hasOriginalValue = tab.sql !== undefined && tab.sql !== null;
+
+          return {
+            ...tab,
+            sql:
+              sanitizedSql === '' && !hasOriginalValue
+                ? DEFAULT_SQL
+                : sanitizedSql,
+          };
+        });
+        setTabs(validTabs);
         setActiveTabId(parsed.activeTabId);
       } catch (error) {
         console.error('Failed to load tabs from localStorage:', error);
+        localStorage.removeItem('rowflow-query-tabs');
         // Create default tab if loading fails
         createInitialTab();
       }
@@ -195,7 +222,7 @@ export function useQueryTabs() {
     const initialTab: QueryTab = {
       id: `tab-${Date.now()}`,
       title: 'Query 1',
-      sql: '-- Write your SQL query here\nSELECT * FROM ',
+      sql: DEFAULT_SQL,
       execution: {
         status: 'idle',
         result: null,
@@ -211,7 +238,7 @@ export function useQueryTabs() {
     const newTab: QueryTab = {
       id: `tab-${Date.now()}`,
       title: `Query ${tabs.length + 1}`,
-      sql: '-- Write your SQL query here\nSELECT * FROM ',
+      sql: DEFAULT_SQL,
       execution: {
         status: 'idle',
         result: null,
@@ -231,7 +258,7 @@ export function useQueryTabs() {
         const newTab: QueryTab = {
           id: `tab-${Date.now()}`,
           title: 'Query 1',
-          sql: '-- Write your SQL query here\nSELECT * FROM ',
+          sql: DEFAULT_SQL,
           execution: {
             status: 'idle',
             result: null,
@@ -264,8 +291,9 @@ export function useQueryTabs() {
   }, []);
 
   const updateTabSql = useCallback((tabId: string, sql: string) => {
+    const normalizedSql = sanitizeSql(sql);
     setTabs((prev) =>
-      prev.map((tab) => (tab.id === tabId ? { ...tab, sql } : tab))
+      prev.map((tab) => (tab.id === tabId ? { ...tab, sql: normalizedSql } : tab))
     );
   }, []);
 

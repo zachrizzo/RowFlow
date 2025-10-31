@@ -21,6 +21,7 @@ fn main() {
         // Register plugins
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::default().build())
+        .plugin(tauri_plugin_fs::init())
         // Register database commands
         .invoke_handler(tauri::generate_handler![
             // Database connection commands

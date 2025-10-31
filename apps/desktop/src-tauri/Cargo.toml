@@ -21,6 +21,7 @@ tauri-build = { version = "2.1", features = [] }
 tauri = { workspace = true, features = ["macos-private-api", "unstable"] }
 tauri-plugin-shell = { workspace = true }
 tauri-plugin-store = { workspace = true }
+tauri-plugin-fs = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true }
