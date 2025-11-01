@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import type { QueryResult, QueryExecutionState } from '@/types/query';
 import { formatSql } from '@/lib/sqlFormatter';
@@ -20,6 +20,7 @@ export function useQueryExecution(options: UseQueryExecutionOptions) {
     error: null,
     duration: 0,
   });
+  const stateRef = useRef<QueryExecutionState>(state);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const backendPidRef = useRef<number | null>(null);
@@ -133,6 +134,10 @@ export function useQueryExecution(options: UseQueryExecutionOptions) {
   /**
    * Execute a query with streaming/pagination support for large result sets
    */
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
   const executeQueryStream = useCallback(
     async (sql: string, chunkSize = 10000, offset = 0) => {
       if (!connectionId) {
@@ -193,32 +198,54 @@ export function useQueryExecution(options: UseQueryExecutionOptions) {
 
         // If this is the first chunk, set the initial result
         // Otherwise, append rows to existing result
-        setState((prev) => {
-          if (offset === 0) {
-            return {
-              status: result.hasMore ? 'running' : 'success',
-              result,
-              error: null,
-              duration,
-            };
-          } else {
-            return {
-              ...prev,
-              status: result.hasMore ? 'running' : 'success',
-              result: prev.result
-                ? {
-                    ...prev.result,
-                    rows: [...prev.result.rows, ...result.rows],
-                    rowCount: prev.result.rowCount + result.rowCount,
-                    hasMore: result.hasMore,
-                  }
-                : result,
-              duration: prev.duration + duration,
-            };
-          }
-        });
+        const previousState = stateRef.current;
+        const previousResult = offset === 0 ? null : previousState.result;
 
-        return result;
+        let combinedResult: QueryResult;
+        if (previousResult) {
+          combinedResult = {
+            ...previousResult,
+            rows: [...previousResult.rows, ...result.rows],
+            rowCount: previousResult.rowCount + result.rowCount,
+            hasMore: result.hasMore,
+            executionTime: previousResult.executionTime + result.executionTime,
+          };
+        } else {
+          combinedResult = {
+            ...result,
+            executionTime: result.executionTime,
+          };
+        }
+
+        const totalDuration = (offset === 0 ? 0 : previousState.duration) + duration;
+
+        const nextState: QueryExecutionState = {
+          status: 'success',
+          result: combinedResult,
+          error: null,
+          duration: totalDuration,
+        };
+
+        setState(nextState);
+        stateRef.current = nextState;
+
+        onSuccess?.(combinedResult);
+
+        if (!result.hasMore) {
+            toast({
+              title: 'Query Complete',
+              description: `${combinedResult.rowCount} rows loaded in ${totalDuration.toFixed(
+                2
+              )}ms`,
+            });
+        } else if (offset === 0) {
+          toast({
+            title: 'Table Preview Loaded',
+            description: `${combinedResult.rowCount} rows available (${chunkSize} per page)`,
+          });
+        }
+
+        return combinedResult;
       } catch (error) {
         const duration = performance.now() - startTime;
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -230,11 +257,19 @@ export function useQueryExecution(options: UseQueryExecutionOptions) {
           duration,
         });
 
-        toast({
-          title: 'Query Failed',
-          description: errorMessage,
-          variant: 'destructive',
-        });
+        if (offset === 0) {
+          toast({
+            title: 'Query Failed',
+            description: errorMessage,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Load More Failed',
+            description: errorMessage,
+            variant: 'destructive',
+          });
+        }
 
         onError?.(errorMessage);
         return null;

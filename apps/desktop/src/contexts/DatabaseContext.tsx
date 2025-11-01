@@ -74,18 +74,23 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
           username: profile.username,
           password: profile.password,
           readOnly: profile.readOnly,
-          ssl: {
-            enabled: profile.tlsConfig?.enabled || false,
-            mode: profile.tlsConfig?.enabled ? 'require' : undefined,
-          },
-          timeouts: {
-            statement: profile.statementTimeout,
-            lock: profile.lockTimeout,
-            idle: profile.idleTimeout,
-          },
-          sshTunnel: profile.sshConfig,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
+          useSsh: profile.useSsh || Boolean(profile.sshConfig),
+          sshConfig: profile.sshConfig,
+          tlsConfig: profile.tlsConfig
+            ? {
+                enabled: profile.tlsConfig.enabled,
+                verifyCa: profile.tlsConfig.verifyCa,
+                caCertPath: profile.tlsConfig.caCertPath,
+                clientCertPath: profile.tlsConfig.clientCertPath,
+                clientKeyPath: profile.tlsConfig.clientKeyPath,
+              }
+            : undefined,
+          connectionTimeout: profile.connectionTimeout,
+          statementTimeout: profile.statementTimeout,
+          lockTimeout: profile.lockTimeout,
+          idleTimeout: profile.idleTimeout,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
           isMcpManaged: true,
         }));
       } catch (error) {

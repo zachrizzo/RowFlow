@@ -15,16 +15,11 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
-        Self {
-            connections: Arc::new(Mutex::new(HashMap::new())),
-        }
+        Self { connections: Arc::new(Mutex::new(HashMap::new())) }
     }
 
     /// Create a new database connection pool
-    pub async fn create_connection(
-        &self,
-        profile: ConnectionProfile,
-    ) -> Result<String> {
+    pub async fn create_connection(&self, profile: ConnectionProfile) -> Result<String> {
         let connection_id = Uuid::new_v4().to_string();
 
         // Build the connection pool
@@ -36,25 +31,17 @@ impl AppState {
         })?;
 
         // Verify connection is working
-        client
-            .query_one("SELECT 1", &[])
-            .await
-            .map_err(|e| {
-                RowFlowError::ConnectionError(format!("Connection test query failed: {}", e))
-            })?;
+        client.query_one("SELECT 1", &[]).await.map_err(|e| {
+            RowFlowError::ConnectionError(format!("Connection test query failed: {}", e))
+        })?;
 
         // Set session parameters
         Self::set_session_parameters(&client, &profile).await?;
 
         // Store the connection pool
         let mut connections = self.connections.lock().await;
-        connections.insert(
-            connection_id.clone(),
-            ConnectionPool {
-                pool,
-                profile: profile.clone(),
-            },
-        );
+        connections
+            .insert(connection_id.clone(), ConnectionPool { pool, profile: profile.clone() });
 
         Ok(connection_id)
     }
@@ -111,9 +98,7 @@ impl AppState {
         }
 
         // Manager configuration
-        let manager_config = ManagerConfig {
-            recycling_method: RecyclingMethod::Fast,
-        };
+        let manager_config = ManagerConfig { recycling_method: RecyclingMethod::Fast };
 
         // TLS configuration
         if let Some(ref tls_config) = profile.tls_config {
@@ -132,7 +117,8 @@ impl AppState {
 
                 // Load client certificate if provided
                 if let (Some(ref cert_path), Some(ref key_path)) =
-                    (&tls_config.client_cert_path, &tls_config.client_key_path) {
+                    (&tls_config.client_cert_path, &tls_config.client_key_path)
+                {
                     let cert = std::fs::read(cert_path)?;
                     let key = std::fs::read(key_path)?;
                     let identity = native_tls::Identity::from_pkcs8(&cert, &key)?;
@@ -144,19 +130,13 @@ impl AppState {
 
                 let manager = Manager::from_config(pg_config, tls_connector, manager_config);
 
-                return Pool::builder(manager)
-                    .max_size(16)
-                    .build()
-                    .map_err(|e| e.into());
+                return Pool::builder(manager).max_size(16).build().map_err(|e| e.into());
             }
         }
 
         // No TLS
         let manager = Manager::from_config(pg_config, NoTls, manager_config);
-        Pool::builder(manager)
-            .max_size(16)
-            .build()
-            .map_err(|e| e.into())
+        Pool::builder(manager).max_size(16).build().map_err(|e| e.into())
     }
 
     /// Set session parameters for a connection
@@ -166,9 +146,7 @@ impl AppState {
     ) -> Result<()> {
         // Set read-only mode if requested
         if profile.read_only {
-            client
-                .execute("SET default_transaction_read_only = true", &[])
-                .await?;
+            client.execute("SET default_transaction_read_only = true", &[]).await?;
         }
 
         // Set statement timeout

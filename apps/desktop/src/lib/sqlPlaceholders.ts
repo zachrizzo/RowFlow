@@ -5,12 +5,18 @@ const sanitizeSql = (sql?: string | null): string => {
     return '';
   }
 
+  // Ensure sql is actually a string
+  if (typeof sql !== 'string') {
+    console.warn('sanitizeSql received non-string value:', typeof sql, sql);
+    return '';
+  }
+
   let sanitized = sql;
 
   sanitized = sanitized.replace(
     /(SELECT\s+\*\s+FROM\s+)((?:undefined|\.|\s|;|,|\n)+)/gi,
     (_, prefix: string, remainder: string) => {
-      const withoutUndefined = remainder.replace(/\bundefined\b/gi, '').trim();
+      const withoutUndefined = remainder.replace(/\boundefined\b/gi, '').trim();
       return withoutUndefined.length > 0 ? `${prefix}${withoutUndefined}` : prefix;
     }
   );
@@ -27,5 +33,20 @@ const isDefaultSql = (sql?: string | null): boolean => {
   return sanitized.length === 0 || sanitized === DEFAULT_SQL.trim();
 };
 
-export { DEFAULT_SQL, sanitizeSql, isDefaultSql };
+const quoteIdentifier = (identifier: string): string => {
+  return `"${identifier.replace(/"/g, '""')}"`;
+};
 
+const generateSelectQuery = (
+  schema: string,
+  table: string,
+  limit = 100,
+  primaryKeys?: string[]
+): string => {
+  const orderByClause = primaryKeys && primaryKeys.length > 0
+    ? ` ORDER BY ${primaryKeys.map(pk => quoteIdentifier(pk)).join(', ')}`
+    : '';
+  return `SELECT * FROM ${quoteIdentifier(schema)}.${quoteIdentifier(table)}${orderByClause} LIMIT ${limit};`;
+};
+
+export { DEFAULT_SQL, sanitizeSql, isDefaultSql, quoteIdentifier, generateSelectQuery };

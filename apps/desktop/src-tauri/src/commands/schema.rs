@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::state::AppState;
 use crate::types::{Column, Constraint, ForeignKey, Index, Schema, Table, TableStats};
+use std::collections::BTreeMap;
 use tauri::State;
 
 /// List all schemas in the database
@@ -78,18 +79,31 @@ pub async fn list_tables(
 
     let rows = client.query(query, &[&schema]).await?;
 
-    let tables = rows
-        .iter()
-        .map(|row| Table {
-            schema: row.get(0),
-            name: row.get(1),
-            table_type: row.get(2),
-            owner: row.get(3),
-            row_count: row.get(4),
-            size: row.get(5),
-            description: row.get(6),
-        })
-        .collect();
+    let mut table_map: BTreeMap<String, Table> = BTreeMap::new();
+
+    for row in rows {
+        let schema: String = row.get(0);
+        let name: String = row.get(1);
+        let table_type: String = row.get(2);
+        let owner: Option<String> = row.get(3);
+        let row_count: Option<i64> = row.get(4);
+        let size: Option<String> = row.get(5);
+        let description: Option<String> = row.get(6);
+
+        let key = format!("{}::{}::{}", schema, name, table_type);
+
+        table_map.entry(key).or_insert(Table {
+            schema,
+            name,
+            table_type,
+            owner,
+            row_count,
+            size,
+            description,
+        });
+    }
+
+    let tables = table_map.into_values().collect();
 
     Ok(tables)
 }
@@ -102,12 +116,7 @@ pub async fn get_table_columns(
     schema: String,
     table: String,
 ) -> Result<Vec<Column>> {
-    log::info!(
-        "Getting columns for table: {}.{} on connection: {}",
-        schema,
-        table,
-        connection_id
-    );
+    log::info!("Getting columns for table: {}.{} on connection: {}", schema, table, connection_id);
 
     let pool = state.get_connection(&connection_id).await?;
     let client = pool.get().await?;
@@ -259,12 +268,7 @@ pub async fn get_indexes(
     schema: String,
     table: String,
 ) -> Result<Vec<Index>> {
-    log::info!(
-        "Getting indexes for table: {}.{} on connection: {}",
-        schema,
-        table,
-        connection_id
-    );
+    log::info!("Getting indexes for table: {}.{} on connection: {}", schema, table, connection_id);
 
     let pool = state.get_connection(&connection_id).await?;
     let client = pool.get().await?;
@@ -426,18 +430,39 @@ pub async fn get_foreign_keys(
 
     let rows = client.query(query, &[&schema, &table]).await?;
 
-    let foreign_keys = rows
+    let foreign_keys: Vec<ForeignKey> = rows
         .iter()
-        .map(|row| ForeignKey {
-            name: row.get(0),
-            columns: row.get(1),
-            foreign_schema: row.get(2),
-            foreign_table: row.get(3),
-            foreign_columns: row.get(4),
-            on_delete: row.get(5),
-            on_update: row.get(6),
+        .map(|row| {
+            // PostgreSQL ARRAY_AGG returns arrays that need to be extracted directly
+            let columns: Vec<String> = row.get(1);
+            let foreign_columns: Vec<String> = row.get(4);
+
+            log::debug!(
+                "FK {}: columns={:?}, foreign_columns={:?}",
+                row.get::<_, String>(0),
+                columns,
+                foreign_columns
+            );
+
+            ForeignKey {
+                name: row.get(0),
+                columns,
+                foreign_schema: row.get(2),
+                foreign_table: row.get(3),
+                foreign_columns,
+                on_delete: row.get(5),
+                on_update: row.get(6),
+            }
         })
         .collect();
+
+    log::info!(
+        "Found {} foreign keys for {}.{}: {:?}",
+        foreign_keys.len(),
+        schema,
+        table,
+        foreign_keys.iter().map(|fk| &fk.name).collect::<Vec<_>>()
+    );
 
     Ok(foreign_keys)
 }

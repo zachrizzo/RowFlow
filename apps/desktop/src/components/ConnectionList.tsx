@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useDatabase } from '@/hooks/useDatabase';
-import type { StoredProfile } from '@/types/connection';
+import type { ConnectionProfile, StoredProfile } from '@/types/connection';
 import { cn } from '@/lib/utils';
 
 interface ConnectionListProps {
@@ -52,29 +52,12 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
 
   const handleConnect = async (profile: StoredProfile) => {
     setConnectingProfileId(profile.id);
-    await connectToProfile({
+    const { createdAt, updatedAt, isMcpManaged, ...rest } = profile;
+    const connectionProfile: ConnectionProfile = {
+      ...rest,
       id: profile.id,
-      name: profile.name,
-      host: profile.host,
-      port: profile.port,
-      database: profile.database,
-      username: profile.username,
-      password: profile.password,
-      readOnly: profile.readOnly,
-      useSsh: !!profile.sshTunnel,
-      sshConfig: profile.sshTunnel,
-      tlsConfig: profile.ssl?.enabled ? {
-        enabled: true,
-        verifyCa: false,
-        caCertPath: undefined,
-        clientCertPath: undefined,
-        clientKeyPath: undefined,
-      } : undefined,
-      connectionTimeout: profile.timeouts?.idle,
-      statementTimeout: profile.timeouts?.statement,
-      lockTimeout: profile.timeouts?.lock,
-      idleTimeout: profile.timeouts?.idle,
-    });
+    };
+    await connectToProfile(connectionProfile);
     setConnectingProfileId(null);
   };
 
@@ -176,12 +159,12 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
                             MCP
                           </span>
                         )}
-                        {profile.sshTunnel && (
+                        {profile.useSsh && (
                           <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
                             SSH
                           </span>
                         )}
-                        {profile.ssl?.enabled && (
+                        {profile.tlsConfig?.enabled && (
                           <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
                             SSL
                           </span>

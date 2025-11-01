@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -7,7 +7,7 @@ import {
   ColumnResizeMode,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Download, Copy, FileJson, FileText } from 'lucide-react';
+import { Download, Copy, FileJson, FileText, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -17,19 +17,216 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ResultCell } from './ResultCell';
 import { JsonViewerDialog } from './JsonViewerDialog';
-import { exportToCsv, exportToJson, copyToClipboard } from '@/lib/export';
+import { JsonSidebar } from './JsonSidebar';
+import { exportToCsv, exportToJson, copyToClipboard, formatCellValue } from '@/lib/export';
 import type { QueryResult } from '@/types/query';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 
 export interface ResultsGridProps {
   result: QueryResult | null;
   onLoadMore?: () => void;
+  loadingMore?: boolean;
+  editable?: boolean;
+  editedRows?: Map<number, Record<string, any>>;
+  onCellEdit?: (
+    rowIndex: number,
+    columnId: string,
+    newValue: any,
+    originalValue: any
+  ) => void;
+  connectionId?: string | null;
+  schema?: string | null;
+  table?: string | null;
+  primaryKeys?: string[];
+  sortColumn?: string | null;
+  sortDirection?: 'asc' | 'desc' | null;
+  onSortChange?: (columnId: string, direction: 'asc' | 'desc' | null) => void;
 }
 
-export function ResultsGrid({ result, onLoadMore }: ResultsGridProps) {
+function valuesEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a == null && b == null) return true;
+  if (typeof a === 'number' && typeof b === 'number' && Number.isNaN(a) && Number.isNaN(b)) {
+    return true;
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function stringifyValue(value: any): string {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function coerceInputValue(input: string, columnType?: string): any {
+  const trimmed = input.trim();
+  if (trimmed.length === 0) {
+    if (!columnType) return '';
+    const lower = columnType.toLowerCase();
+    if (
+      lower.includes('int') ||
+      lower.includes('numeric') ||
+      lower.includes('decimal') ||
+      lower.includes('float') ||
+      lower.includes('double')
+    ) {
+      return null;
+    }
+    if (lower.includes('bool')) {
+      return null;
+    }
+    return '';
+  }
+
+  if (trimmed.toUpperCase() === 'NULL') {
+    return null;
+  }
+
+  if (!columnType) {
+    return input;
+  }
+
+  const lower = columnType.toLowerCase();
+
+  if (
+    lower.includes('int') ||
+    lower.includes('numeric') ||
+    lower.includes('decimal') ||
+    lower.includes('float') ||
+    lower.includes('double')
+  ) {
+    const numeric = Number(trimmed);
+    if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
+      return numeric;
+    }
+  }
+
+  if (lower.includes('bool')) {
+    const lowerTrimmed = trimmed.toLowerCase();
+    if (lowerTrimmed === 'true' || lowerTrimmed === '1') return true;
+    if (lowerTrimmed === 'false' || lowerTrimmed === '0') return false;
+  }
+
+  if (lower.includes('json')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      return input;
+    }
+  }
+
+  return input;
+}
+
+interface EditableCellProps {
+  rowIndex: number;
+  columnId: string;
+  value: any;
+  originalValue: any;
+  onCommit?: (
+    rowIndex: number,
+    columnId: string,
+    newValue: any,
+    originalValue: any
+  ) => void;
+  columnType?: string;
+}
+
+function EditableCell({
+  rowIndex,
+  columnId,
+  value,
+  originalValue,
+  onCommit,
+  columnType,
+}: EditableCellProps) {
+  const [draft, setDraft] = useState<string>(() => {
+    if (value === null || value === undefined) return '';
+    return stringifyValue(value);
+  });
+  const isBoolean = typeof originalValue === 'boolean';
+
+  useEffect(() => {
+    if (isBoolean) return;
+    setDraft(stringifyValue(value));
+  }, [value, isBoolean]);
+
+  if (isBoolean) {
+    return (
+      <div className="px-3 py-2 h-full flex items-center">
+        <Switch
+          checked={Boolean(value)}
+          onCheckedChange={(checked) =>
+            onCommit?.(rowIndex, columnId, Boolean(checked), originalValue)
+          }
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="px-2 py-1.5 h-full flex items-center">
+      <Input
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() =>
+          onCommit?.(
+            rowIndex,
+            columnId,
+            coerceInputValue(draft, columnType),
+            originalValue
+          )
+        }
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            event.currentTarget.blur();
+          } else if (event.key === 'Escape') {
+            setDraft(stringifyValue(originalValue));
+            event.currentTarget.blur();
+          }
+        }}
+        className="h-7 text-xs"
+        placeholder="NULL"
+      />
+    </div>
+  );
+}
+
+export function ResultsGrid({
+  result,
+  onLoadMore,
+  loadingMore = false,
+  editable = false,
+  editedRows,
+  onCellEdit,
+  connectionId = null,
+  schema = null,
+  table = null,
+  primaryKeys = [],
+  sortColumn = null,
+  sortDirection = null,
+  onSortChange,
+}: ResultsGridProps) {
   const [jsonDialogOpen, setJsonDialogOpen] = useState(false);
   const [selectedJsonValue, setSelectedJsonValue] = useState<any>(null);
+  const [jsonSidebarOpen, setJsonSidebarOpen] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<Record<string, any> | null>(null);
   const { toast } = useToast();
 
   // Create columns from result fields
@@ -38,19 +235,105 @@ export function ResultsGrid({ result, onLoadMore }: ResultsGridProps) {
 
     return result.fields.map((field) => ({
       accessorKey: field.name,
-      header: () => (
-        <div className="flex flex-col gap-0.5 px-3 py-2">
-          <span className="font-semibold text-xs">{field.name}</span>
-          <span className="text-[10px] text-muted-foreground font-normal">
-            {field.typeName}
-          </span>
-        </div>
-      ),
-      cell: ({ getValue }) => {
-        const value = getValue();
+      id: field.name,
+      header: () => {
+        const isSorted = sortColumn === field.name;
+        const currentDirection = isSorted ? sortDirection : null;
+
+        const handleHeaderClick = () => {
+          if (!onSortChange) return;
+          let nextDirection: 'asc' | 'desc' | null;
+          if (!currentDirection) {
+            nextDirection = 'asc';
+          } else if (currentDirection === 'asc') {
+            nextDirection = 'desc';
+          } else {
+            nextDirection = null;
+          }
+          onSortChange(field.name, nextDirection);
+        };
+
+        return (
+          <button
+            type="button"
+            onClick={handleHeaderClick}
+            className="w-full text-left px-3 py-2 flex flex-col gap-0.5 hover:bg-muted/70 transition-colors"
+          >
+            <span className="flex items-center gap-1">
+              <span className="font-semibold text-xs truncate">{field.name}</span>
+              {onSortChange && (
+                currentDirection === 'asc' ? (
+                  <ArrowUp className="h-3 w-3 text-muted-foreground" />
+                ) : currentDirection === 'desc' ? (
+                  <ArrowDown className="h-3 w-3 text-muted-foreground" />
+                ) : (
+                  <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-70" />
+                )
+              )}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-normal truncate">
+              {field.typeName}
+            </span>
+          </button>
+        );
+      },
+      cell: ({ row, column }) => {
+        const columnId = column.id;
+        const rowIndex = row.index;
+        const originalRow = row.original ?? {};
+        const updatedRow = editedRows?.get(rowIndex);
+        const displayValue =
+          updatedRow && columnId in updatedRow
+            ? updatedRow[columnId]
+            : originalRow[columnId];
+        const originalValue = originalRow[columnId];
+        const isDirty =
+          updatedRow && columnId in updatedRow
+            ? !valuesEqual(displayValue, originalValue)
+            : false;
+
+        const hasPrimaryKeys =
+          primaryKeys.length === 0 ||
+          primaryKeys.every(
+            (pk) =>
+              originalRow[pk] !== null &&
+              originalRow[pk] !== undefined
+          );
+
+        if (editable) {
+          if (!hasPrimaryKeys) {
+            return (
+              <div
+                className="px-3 py-2 h-full flex items-center text-xs truncate bg-muted/40 text-muted-foreground cursor-not-allowed"
+                title="Row cannot be edited because primary key values are NULL."
+              >
+                {formatCellValue(displayValue)}
+              </div>
+            );
+          }
+
+          return (
+            <div
+              className={cn(
+                'h-full w-full',
+                isDirty && 'bg-yellow-500/10 dark:bg-yellow-500/20'
+              )}
+            >
+              <EditableCell
+                rowIndex={rowIndex}
+                columnId={columnId}
+                value={displayValue}
+                originalValue={originalValue}
+                columnType={field.typeName}
+                onCommit={onCellEdit}
+              />
+            </div>
+          );
+        }
+
         return (
           <ResultCell
-            value={value}
+            value={displayValue}
             onExpand={(val) => {
               setSelectedJsonValue(val);
               setJsonDialogOpen(true);
@@ -62,11 +345,11 @@ export function ResultsGrid({ result, onLoadMore }: ResultsGridProps) {
       minSize: 100,
       maxSize: 600,
     }));
-  }, [result]);
+  }, [result, editable, editedRows, onCellEdit, sortColumn, sortDirection, onSortChange]);
 
   const [columnResizeMode] = useState<ColumnResizeMode>('onChange');
 
-  const table = useReactTable({
+  const reactTable = useReactTable({
     data: result?.rows || [],
     columns,
     getCoreRowModel: getCoreRowModel(),
@@ -75,7 +358,7 @@ export function ResultsGrid({ result, onLoadMore }: ResultsGridProps) {
   });
 
   // Virtualization
-  const { rows } = table.getRowModel();
+  const { rows } = reactTable.getRowModel();
   const parentRef = useMemo(() => ({ current: null as HTMLDivElement | null }), []);
 
   const virtualizer = useVirtualizer({
@@ -218,7 +501,7 @@ export function ResultsGrid({ result, onLoadMore }: ResultsGridProps) {
       >
         <table className="w-full border-collapse">
           <thead className="sticky top-0 z-10 bg-muted">
-            {table.getHeaderGroups().map((headerGroup) => (
+            {reactTable.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id} className="border-b">
                 {headerGroup.headers.map((header) => (
                   <th
@@ -260,9 +543,23 @@ export function ResultsGrid({ result, onLoadMore }: ResultsGridProps) {
                 <tr
                   key={row.id}
                   className={cn(
-                    'border-b hover:bg-muted/30 transition-colors',
-                    virtualRow.index % 2 === 0 ? 'bg-background' : 'bg-muted/10'
+                    'border-b transition-colors',
+                    editable && editedRows?.has(row.index)
+                      ? 'bg-yellow-500/5 hover:bg-yellow-500/10 dark:bg-yellow-500/10 dark:hover:bg-yellow-500/20'
+                      : virtualRow.index % 2 === 0
+                        ? 'bg-background hover:bg-muted/30'
+                        : 'bg-muted/10 hover:bg-muted/30',
+                    selectedRow === row.original && 'ring-2 ring-primary'
                   )}
+                  onContextMenu={(e) => {
+                    // Prevent default browser context menu
+                    e.preventDefault();
+                    // Only open sidebar if we have table context
+                    if (schema && table && connectionId) {
+                      setSelectedRow(row.original);
+                      setJsonSidebarOpen(true);
+                    }
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td
@@ -287,8 +584,15 @@ export function ResultsGrid({ result, onLoadMore }: ResultsGridProps) {
         {/* Load more button if there are more results */}
         {result.hasMore && onLoadMore && (
           <div className="flex justify-center py-4">
-            <Button onClick={onLoadMore} variant="outline" size="sm">
-              Load More Results
+            <Button onClick={onLoadMore} variant="outline" size="sm" disabled={loadingMore}>
+              {loadingMore ? (
+                <>
+                  <Loader2 className="h-3 w-3 mr-2 animate-spin" />
+                  Loading...
+                </>
+              ) : (
+                'Load More Results'
+              )}
             </Button>
           </div>
         )}
@@ -300,6 +604,18 @@ export function ResultsGrid({ result, onLoadMore }: ResultsGridProps) {
         onOpenChange={setJsonDialogOpen}
         value={selectedJsonValue}
       />
+
+      {/* JSON Sidebar */}
+      {schema && table && connectionId && (
+        <JsonSidebar
+          open={jsonSidebarOpen}
+          onOpenChange={setJsonSidebarOpen}
+          rowData={selectedRow}
+          connectionId={connectionId}
+          schema={schema}
+          table={table}
+        />
+      )}
     </div>
   );
 }

@@ -18,19 +18,14 @@ pub async fn connect_database(
 
 /// Disconnect from a database
 #[tauri::command]
-pub async fn disconnect_database(
-    state: State<'_, AppState>,
-    connection_id: String,
-) -> Result<()> {
+pub async fn disconnect_database(state: State<'_, AppState>, connection_id: String) -> Result<()> {
     log::info!("Disconnecting from database: {}", connection_id);
     state.remove_connection(&connection_id).await
 }
 
 /// Test a database connection
 #[tauri::command]
-pub async fn test_connection(
-    profile: ConnectionProfile,
-) -> Result<ConnectionInfo> {
+pub async fn test_connection(profile: ConnectionProfile) -> Result<ConnectionInfo> {
     log::info!("Testing connection to: {}", profile.name);
 
     // Create a temporary state to test the connection
@@ -42,9 +37,7 @@ pub async fn test_connection(
     let client = pool.get().await?;
 
     // Query server information
-    let version_row = client
-        .query_one("SELECT version() as version", &[])
-        .await?;
+    let version_row = client.query_one("SELECT version() as version", &[]).await?;
     let server_version: String = version_row.get(0);
 
     let info_query = r#"
@@ -143,13 +136,36 @@ pub async fn execute_query(
 
     let row_count = row_values.len();
 
-    Ok(QueryResult {
-        fields,
-        rows: row_values,
-        row_count,
-        execution_time,
-        has_more: false,
-    })
+    Ok(QueryResult { fields, rows: row_values, row_count, execution_time, has_more: false })
+}
+
+/// Execute a SQL statement that modifies data and returns the affected row count.
+#[tauri::command]
+pub async fn execute_update(
+    state: State<'_, AppState>,
+    connection_id: String,
+    sql: String,
+) -> Result<u64> {
+    log::info!("Executing update on connection: {}", connection_id);
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    let sanitized_sql = sanitize_sql_for_wrapping(&sql);
+
+    let start = Instant::now();
+
+    let statement = client.prepare(&sanitized_sql).await?;
+    let affected = client.execute(&statement, &[]).await?;
+
+    let duration = start.elapsed().as_secs_f64() * 1000.0;
+    log::info!(
+        "Update completed: {} rows affected in {:.2}ms",
+        affected,
+        duration
+    );
+
+    Ok(affected)
 }
 
 /// Execute a query with streaming support for large result sets
@@ -174,7 +190,9 @@ pub async fn execute_query_stream(
     // Wrap the query with LIMIT and OFFSET
     let paginated_sql = format!(
         "SELECT * FROM ({}) AS subquery LIMIT {} OFFSET {}",
-        sql, chunk_size + 1, offset
+        sanitize_sql_for_wrapping(&sql),
+        chunk_size + 1,
+        offset
     );
 
     let start = Instant::now();
@@ -186,11 +204,7 @@ pub async fn execute_query_stream(
     let execution_time = start.elapsed().as_secs_f64() * 1000.0;
 
     let has_more = rows.len() > chunk_size;
-    let rows_to_return = if has_more {
-        &rows[..chunk_size]
-    } else {
-        &rows[..]
-    };
+    let rows_to_return = if has_more { &rows[..chunk_size] } else { &rows[..] };
 
     // Extract field information
     let fields: Vec<FieldInfo> = statement
@@ -236,13 +250,14 @@ pub async fn execute_query_stream(
 
     let row_count = row_values.len();
 
-    Ok(QueryResult {
-        fields,
-        rows: row_values,
-        row_count,
-        execution_time,
-        has_more,
-    })
+    Ok(QueryResult { fields, rows: row_values, row_count, execution_time, has_more })
+}
+
+/// Normalize SQL so it can be wrapped inside a subquery without syntax errors.
+fn sanitize_sql_for_wrapping(sql: &str) -> String {
+    let trimmed = sql.trim();
+    let sanitized = trimmed.trim_end_matches(&[';', ' ', '\t', '\n', '\r']);
+    sanitized.to_string()
 }
 
 /// Cancel a running query
@@ -252,11 +267,7 @@ pub async fn cancel_query(
     connection_id: String,
     backend_pid: i32,
 ) -> Result<()> {
-    log::info!(
-        "Cancelling query with PID {} on connection: {}",
-        backend_pid,
-        connection_id
-    );
+    log::info!("Cancelling query with PID {} on connection: {}", backend_pid, connection_id);
 
     let pool = state.get_connection(&connection_id).await?;
     let client = pool.get().await?;
@@ -270,10 +281,7 @@ pub async fn cancel_query(
 
 /// Get the current backend process ID
 #[tauri::command]
-pub async fn get_backend_pid(
-    state: State<'_, AppState>,
-    connection_id: String,
-) -> Result<i32> {
+pub async fn get_backend_pid(state: State<'_, AppState>, connection_id: String) -> Result<i32> {
     let pool = state.get_connection(&connection_id).await?;
     let client = pool.get().await?;
 
@@ -330,11 +338,9 @@ fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type: &Type) -> 
             .flatten()
             .map(Value::String)
             .unwrap_or(Value::Null),
-        &Type::JSON | &Type::JSONB => row
-            .try_get::<_, Option<Value>>(idx)
-            .ok()
-            .flatten()
-            .unwrap_or(Value::Null),
+        &Type::JSON | &Type::JSONB => {
+            row.try_get::<_, Option<Value>>(idx).ok().flatten().unwrap_or(Value::Null)
+        }
         &Type::TIMESTAMP | &Type::TIMESTAMPTZ => row
             .try_get::<_, Option<chrono::NaiveDateTime>>(idx)
             .ok()
@@ -359,8 +365,8 @@ fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type: &Type) -> 
 /// List connection profiles from MCP server .env file
 #[tauri::command]
 pub async fn list_mcp_profiles() -> Result<Vec<ConnectionProfile>> {
-    use std::fs;
     use std::collections::HashMap;
+    use std::fs;
 
     // Get MCP server .env file path
     // CARGO_MANIFEST_DIR = .../apps/desktop/src-tauri
@@ -371,7 +377,11 @@ pub async fn list_mcp_profiles() -> Result<Vec<ConnectionProfile>> {
         .parent()
         .and_then(|p| p.parent())
         .map(|p| p.join("mcp-server").join(".env"))
-        .ok_or_else(|| crate::error::RowFlowError::InternalError("Failed to resolve MCP server path".to_string()))?;
+        .ok_or_else(|| {
+            crate::error::RowFlowError::InternalError(
+                "Failed to resolve MCP server path".to_string(),
+            )
+        })?;
 
     log::info!("Reading MCP profiles from: {:?}", mcp_env_path);
 
@@ -396,11 +406,13 @@ pub async fn list_mcp_profiles() -> Result<Vec<ConnectionProfile>> {
                 let remainder = &key["PG_PROFILE_".len()..];
 
                 // Find the field name (HOST, PORT, etc.)
-                let known_fields = ["HOST", "PORT", "DATABASE", "USER", "PASSWORD", "SSL", "MAX_CONNECTIONS"];
+                let known_fields =
+                    ["HOST", "PORT", "DATABASE", "USER", "PASSWORD", "SSL", "MAX_CONNECTIONS"];
                 for field in &known_fields {
                     if remainder.ends_with(&format!("_{}", field)) {
                         let profile_name = &remainder[..remainder.len() - field.len() - 1];
-                        profile_data.entry(profile_name.to_string())
+                        profile_data
+                            .entry(profile_name.to_string())
                             .or_insert_with(HashMap::new)
                             .insert(field.to_string(), value.to_string());
                         break;

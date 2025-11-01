@@ -1,6 +1,9 @@
 // Schema tree types for the browser
 
-import type { Schema, Table, Column } from './connection';
+import type { Schema, Table, Column, ForeignKey } from './connection';
+
+// Re-export ForeignKey for use in other modules
+export type { ForeignKey };
 
 export type NodeType = 'schema' | 'table' | 'view' | 'column';
 
@@ -54,12 +57,25 @@ export interface SchemaTreeState {
   error: string | null;
 }
 
-export interface SchemaStats {
-  totalSchemas: number;
-  totalTables: number;
-  totalViews: number;
-  systemSchemas: number;
-  userSchemas: number;
+export interface SchemaGraphNode {
+  id: string;
+  schema: string;
+  name: string;
+  tableType: string;
+  columns: Column[];
+  foreignKeys: ForeignKey[];
+  isExternal?: boolean;
+}
+
+export interface SchemaGraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  name: string;
+  columns: string[];
+  foreignColumns: string[];
+  onDelete: string;
+  onUpdate: string;
 }
 
 // Helper functions to convert backend types to tree nodes
@@ -83,7 +99,7 @@ export function schemaToNode(schema: Schema): SchemaNode {
 export function tableToNode(table: Table, schema: string): SchemaNode {
   const isView = table.tableType === 'VIEW';
   return {
-    id: `${schema}.${table.name}`,
+    id: `${schema}.${table.name}:${isView ? 'view' : 'table'}`,
     name: table.name,
     type: isView ? 'view' : 'table',
     schema: schema,
@@ -103,7 +119,7 @@ export function tableToNode(table: Table, schema: string): SchemaNode {
 
 export function columnToNode(column: Column, schema: string, table: string): SchemaNode {
   return {
-    id: `${schema}.${table}.${column.name}`,
+    id: `${schema}.${table}.${column.name}:column`,
     name: column.name,
     type: 'column',
     schema: schema,
@@ -203,38 +219,4 @@ export function filterNodes(
   }
 
   return result;
-}
-
-export function calculateStats(nodes: SchemaNode[]): SchemaStats {
-  let totalSchemas = 0;
-  let totalTables = 0;
-  let totalViews = 0;
-  let systemSchemas = 0;
-  let userSchemas = 0;
-
-  for (const node of nodes) {
-    if (node.type === 'schema') {
-      totalSchemas++;
-      if (node.metadata?.isSystem) {
-        systemSchemas++;
-      } else {
-        userSchemas++;
-      }
-
-      if (node.children) {
-        for (const child of node.children) {
-          if (child.type === 'table') totalTables++;
-          if (child.type === 'view') totalViews++;
-        }
-      }
-    }
-  }
-
-  return {
-    totalSchemas,
-    totalTables,
-    totalViews,
-    systemSchemas,
-    userSchemas,
-  };
 }

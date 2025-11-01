@@ -21,12 +21,14 @@ import {
 } from '@/components/ui/dialog';
 import { SchemaNodeContextMenu } from '@/components/SchemaNodeContextMenu';
 import type { SchemaNode } from '@/types/schema';
+import { cn } from '@/lib/utils';
 
 interface SchemaTreeProps {
   nodes: SchemaNode[];
   expandedNodes: Set<string>;
   onToggleNode: (nodeId: string) => void;
-  onTableDoubleClick?: (schema: string, table: string) => void;
+  onTableSelect?: (schema: string, table: string) => void;
+  selectedTable?: { schema: string; table: string } | null;
   loading?: boolean;
 }
 
@@ -62,37 +64,45 @@ interface TreeNodeProps {
   node: SchemaNode;
   level: number;
   isExpanded: boolean;
+  expandedNodes: Set<string>;
   onToggle: (nodeId: string) => void;
-  onTableDoubleClick?: (schema: string, table: string) => void;
+  onTableSelect?: (schema: string, table: string) => void;
   onViewInfo: (node: SchemaNode) => void;
+  selectedTable?: { schema: string; table: string } | null;
 }
 
 function TreeNode({
   node,
   level,
   isExpanded,
+  expandedNodes,
   onToggle,
-  onTableDoubleClick,
+  onTableSelect,
   onViewInfo,
+  selectedTable,
 }: TreeNodeProps) {
   const hasChildren = node.children && node.children.length > 0;
   const canExpand = node.type === 'schema' || node.type === 'table' || node.type === 'view';
+  const isSelected =
+    (node.type === 'table' || node.type === 'view') &&
+    node.schema &&
+    node.table &&
+    selectedTable?.schema === node.schema &&
+    selectedTable.table === node.table;
 
   const handleClick = () => {
-    if (canExpand) {
+    if (node.type === 'table' || node.type === 'view') {
+      if (node.schema && node.table && onTableSelect) {
+        onTableSelect(node.schema, node.table);
+      }
+    } else if (canExpand) {
       onToggle(node.id);
     }
   };
 
-  const handleDoubleClick = () => {
-    if ((node.type === 'table' || node.type === 'view') && node.schema && node.table && onTableDoubleClick) {
-      onTableDoubleClick(node.schema, node.table);
-    }
-  };
-
   const handleSampleTable = (schema: string, table: string) => {
-    if (onTableDoubleClick) {
-      onTableDoubleClick(schema, table);
+    if (onTableSelect) {
+      onTableSelect(schema, table);
     }
   };
 
@@ -104,14 +114,12 @@ function TreeNode({
         onViewInfo={onViewInfo}
       >
         <div
-          className={`
-            flex items-center gap-2 px-2 py-1.5 cursor-pointer
-            hover:bg-accent rounded-sm transition-colors
-            group
-          `}
+          className={cn(
+            'flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-accent rounded-sm transition-colors group',
+            isSelected && 'bg-primary/10 text-primary'
+          )}
           style={{ paddingLeft: `${level * 20 + 8}px` }}
           onClick={handleClick}
-          onDoubleClick={handleDoubleClick}
         >
           {/* Expand/collapse icon */}
           {canExpand && (
@@ -187,10 +195,12 @@ function TreeNode({
               key={child.id}
               node={child}
               level={level + 1}
-              isExpanded={false}
+              isExpanded={expandedNodes.has(child.id)}
+              expandedNodes={expandedNodes}
               onToggle={onToggle}
-              onTableDoubleClick={onTableDoubleClick}
+              onTableSelect={onTableSelect}
               onViewInfo={onViewInfo}
+              selectedTable={selectedTable}
             />
           ))}
         </div>
@@ -203,7 +213,8 @@ export function SchemaTree({
   nodes,
   expandedNodes,
   onToggleNode,
-  onTableDoubleClick,
+  onTableSelect,
+  selectedTable,
   loading = false,
 }: SchemaTreeProps) {
   const [infoNode, setInfoNode] = useState<SchemaNode | null>(null);
@@ -249,9 +260,11 @@ export function SchemaTree({
               node={node}
               level={0}
               isExpanded={expandedNodes.has(node.id)}
+              expandedNodes={expandedNodes}
               onToggle={onToggleNode}
-              onTableDoubleClick={onTableDoubleClick}
+              onTableSelect={onTableSelect}
               onViewInfo={handleViewInfo}
+              selectedTable={selectedTable}
             />
           ))}
         </div>

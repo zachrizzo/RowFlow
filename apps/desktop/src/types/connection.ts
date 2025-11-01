@@ -95,6 +95,16 @@ export interface Column {
   description?: string;
 }
 
+export interface ForeignKey {
+  name: string;
+  columns: string[];
+  foreignSchema: string;
+  foreignTable: string;
+  foreignColumns: string[];
+  onDelete: string;
+  onUpdate: string;
+}
+
 // Connection status for UI state management
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -107,26 +117,9 @@ export interface ConnectionState {
 }
 
 // Stored profile (without sensitive runtime data)
-export interface StoredProfile {
+export interface StoredProfile extends Omit<ConnectionProfile, 'id'> {
   id: string;
-  name: string;
-  host: string;
-  port: number;
-  database: string;
-  username: string;
-  password?: string; // Encrypted or plain - user warning needed
-  readOnly: boolean;
-  ssl?: {
-    enabled: boolean;
-    mode?: string;
-  };
-  timeouts?: {
-    statement?: number;
-    lock?: number;
-    idle?: number;
-  };
-  sshTunnel?: SshConfig;
-  createdAt: string;
-  updatedAt: string;
+  createdAt: number;
+  updatedAt: number;
   isMcpManaged?: boolean; // True if managed by MCP server
 }

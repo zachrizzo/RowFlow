@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback } from 'react';
-import { X, Plus, Edit2, Check } from 'lucide-react';
+import { X, Plus, Edit2, Check, Database, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import type { QueryTab } from '@/types/query';
+import type { QueryTab, QueryTabContext, QueryResult } from '@/types/query';
 import { DEFAULT_SQL, sanitizeSql } from '@/lib/sqlPlaceholders';
 
 export interface QueryTabsProps {
@@ -69,6 +69,13 @@ export function QueryTabs({
                 : 'bg-muted/50 border-transparent hover:bg-muted hover:border-border/50'
             )}
           >
+            {/* View type icon */}
+            {tab.viewType === 'table' ? (
+              <Database className="h-3 w-3 text-blue-500" />
+            ) : (
+              <FileCode className="h-3 w-3 text-muted-foreground" />
+            )}
+
             {/* Execution status indicator */}
             {tab.execution.status === 'running' && (
               <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
@@ -160,15 +167,34 @@ export function useQueryTabs() {
   const [tabs, setTabs] = useState<QueryTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
 
+  // Define createInitialTab before using it in effects
+  const createInitialTab = useCallback(() => {
+    const initialTab: QueryTab = {
+      id: `tab-${Date.now()}`,
+      title: 'Query 1',
+      sql: DEFAULT_SQL,
+      execution: {
+        status: 'idle',
+        result: null,
+        error: null,
+        duration: 0,
+      },
+      context: undefined,
+      viewType: 'sql',
+    };
+    setTabs([initialTab]);
+    setActiveTabId(initialTab.id);
+  }, []);
+
   // Load tabs from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem('rowflow-query-tabs');
     if (stored) {
       try {
         const parsed = JSON.parse(stored);
-        // Check if data is corrupted (tabs have undefined or null sql)
+        // Check if data is corrupted (tabs have undefined, null, or non-string sql)
         const hasCorruptedData = parsed.tabs?.some(
-          (tab: any) => tab.sql === undefined || tab.sql === null
+          (tab: any) => tab.sql === undefined || tab.sql === null || typeof tab.sql !== 'string'
         );
 
         if (hasCorruptedData) {
@@ -181,7 +207,7 @@ export function useQueryTabs() {
         // Ensure all tabs have valid sql property
         const validTabs = parsed.tabs.map((tab: QueryTab) => {
           const sanitizedSql = sanitizeSql(tab.sql);
-          const hasOriginalValue = tab.sql !== undefined && tab.sql !== null;
+          const hasOriginalValue = tab.sql !== undefined && tab.sql !== null && typeof tab.sql === 'string';
 
           return {
             ...tab,
@@ -189,6 +215,8 @@ export function useQueryTabs() {
               sanitizedSql === '' && !hasOriginalValue
                 ? DEFAULT_SQL
                 : sanitizedSql,
+            context: tab.context,
+            viewType: tab.viewType || 'sql', // Default to 'sql' for backwards compatibility
           };
         });
         setTabs(validTabs);
@@ -203,36 +231,29 @@ export function useQueryTabs() {
       // Create default tab if no stored tabs
       createInitialTab();
     }
-  }, []);
+  }, [createInitialTab]);
 
   // Save tabs to localStorage whenever they change
   useEffect(() => {
     if (tabs.length > 0) {
-      localStorage.setItem(
-        'rowflow-query-tabs',
-        JSON.stringify({
-          tabs,
-          activeTabId,
-        })
+      // Validate all tabs have valid sql strings before saving
+      const allTabsValid = tabs.every(
+        (tab) => tab.sql !== undefined && tab.sql !== null && typeof tab.sql === 'string'
       );
+
+      if (allTabsValid) {
+        localStorage.setItem(
+          'rowflow-query-tabs',
+          JSON.stringify({
+            tabs,
+            activeTabId,
+          })
+        );
+      } else {
+        console.error('Attempted to save invalid tabs to localStorage, skipping save');
+      }
     }
   }, [tabs, activeTabId]);
-
-  const createInitialTab = () => {
-    const initialTab: QueryTab = {
-      id: `tab-${Date.now()}`,
-      title: 'Query 1',
-      sql: DEFAULT_SQL,
-      execution: {
-        status: 'idle',
-        result: null,
-        error: null,
-        duration: 0,
-      },
-    };
-    setTabs([initialTab]);
-    setActiveTabId(initialTab.id);
-  };
 
   const addTab = useCallback(() => {
     const newTab: QueryTab = {
@@ -245,6 +266,8 @@ export function useQueryTabs() {
         error: null,
         duration: 0,
       },
+      context: undefined,
+      viewType: 'sql',
     };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
@@ -265,6 +288,8 @@ export function useQueryTabs() {
             error: null,
             duration: 0,
           },
+          context: undefined,
+          viewType: 'sql',
         };
         setActiveTabId(newTab.id);
         return [newTab];
@@ -291,7 +316,14 @@ export function useQueryTabs() {
   }, []);
 
   const updateTabSql = useCallback((tabId: string, sql: string) => {
+    // Validate input is actually a string
+    if (typeof sql !== 'string') {
+      console.error('updateTabSql called with non-string value:', typeof sql, sql);
+      return; // Don't update if not a string
+    }
+
     const normalizedSql = sanitizeSql(sql);
+
     setTabs((prev) =>
       prev.map((tab) => (tab.id === tabId ? { ...tab, sql: normalizedSql } : tab))
     );
@@ -310,6 +342,71 @@ export function useQueryTabs() {
     []
   );
 
+  const updateTabContext = useCallback(
+    (tabId: string, context: QueryTabContext | undefined) => {
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === tabId
+            ? { ...tab, context }
+            : tab
+        )
+      );
+    },
+    []
+  );
+
+  const addTableTab = useCallback((schema: string, table: string, result: QueryResult, sql?: string) => {
+    // Check if a tab for this table already exists
+    const existingTab = tabs.find(
+      (t) => t.viewType === 'table' && t.context?.type === 'table' &&
+      t.context.schema === schema && t.context.table === table
+    );
+    
+    if (existingTab) {
+      // Update existing tab instead of creating a new one
+      setTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === existingTab.id
+            ? {
+                ...tab,
+                sql: sql || tab.sql, // Update SQL if provided
+                execution: {
+                  status: 'success',
+                  result,
+                  error: null,
+                  duration: result.executionTime,
+                },
+              }
+            : tab
+        )
+      );
+      setActiveTabId(existingTab.id);
+      return existingTab.id;
+    }
+
+    const tabId = `table-${schema}-${table}-${Date.now()}`;
+    const newTab: QueryTab = {
+      id: tabId,
+      title: `${schema}.${table}`,
+      sql: sql || '', // Store SQL for load more functionality
+      execution: {
+        status: 'success',
+        result,
+        error: null,
+        duration: result.executionTime,
+      },
+      context: {
+        type: 'table',
+        schema,
+        table,
+      },
+      viewType: 'table',
+    };
+    setTabs((prev) => [...prev, newTab]);
+    setActiveTabId(tabId);
+    return tabId;
+  }, [tabs]);
+
   const getActiveTab = useCallback(() => {
     return tabs.find((t) => t.id === activeTabId) || null;
   }, [tabs, activeTabId]);
@@ -320,9 +417,11 @@ export function useQueryTabs() {
     activeTab: getActiveTab(),
     setActiveTabId,
     addTab,
+    addTableTab,
     closeTab,
     renameTab,
     updateTabSql,
     updateTabExecution,
+    updateTabContext,
   };
 }

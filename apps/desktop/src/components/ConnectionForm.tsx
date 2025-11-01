@@ -98,10 +98,10 @@ export function ConnectionForm({ profile, onSuccess, onCancel }: ConnectionFormP
       sshPassword: profile?.sshConfig?.password || '',
       sshPrivateKeyPath: profile?.sshConfig?.privateKeyPath || '',
       sshPassphrase: profile?.sshConfig?.passphrase || '',
-      connectionTimeout: profile?.connectionTimeout || 30,
-      statementTimeout: profile?.statementTimeout || 0,
-      lockTimeout: profile?.lockTimeout || 0,
-      idleTimeout: profile?.idleTimeout || 0,
+      connectionTimeout: profile?.connectionTimeout ?? 30,
+      statementTimeout: profile?.statementTimeout ?? 0,
+      lockTimeout: profile?.lockTimeout ?? 0,
+      idleTimeout: profile?.idleTimeout ?? 0,
     },
   });
 

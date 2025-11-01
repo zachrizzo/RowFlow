@@ -21,11 +21,23 @@ export interface QueryExecutionState {
   backendPid?: number;
 }
 
+export interface TableQueryContext {
+  type: 'table';
+  schema: string;
+  table: string;
+}
+
+export type QueryTabContext = TableQueryContext;
+
+export type QueryTabViewType = 'sql' | 'table';
+
 export interface QueryTab {
   id: string;
   title: string;
   sql: string;
   execution: QueryExecutionState;
+  context?: QueryTabContext;
+  viewType?: QueryTabViewType; // 'sql' for SQL editor, 'table' for table data view
 }
 
 export interface QueryHistoryItem {

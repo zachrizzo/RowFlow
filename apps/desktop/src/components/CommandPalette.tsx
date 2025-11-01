@@ -27,6 +27,7 @@ import { McpInfoDialog } from './McpInfoDialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Command } from '@/lib/commands';
+import type { ConnectionProfile } from '@/types/connection';
 
 const categoryColors = {
   connection: 'text-blue-400',
@@ -485,7 +486,12 @@ export function CommandPalette({ onOpenSettings }: CommandPaletteProps = {}) {
         icon: Database,
         category: 'connection' as const,
         action: async () => {
-          await connectToProfile(profile);
+          const { createdAt, updatedAt, isMcpManaged, ...rest } = profile;
+          const connectionProfile: ConnectionProfile = {
+            ...rest,
+            id: profile.id,
+          };
+          await connectToProfile(connectionProfile);
         },
       });
     });

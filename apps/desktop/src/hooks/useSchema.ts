@@ -4,14 +4,12 @@ import type { Schema, Table, Column } from '@/types/connection';
 import type {
   SchemaNode,
   FilterType,
-  SchemaStats,
 } from '@/types/schema';
 import {
   schemaToNode,
   tableToNode,
   columnToNode,
   filterNodes,
-  calculateStats,
 } from '@/types/schema';
 
 interface UseSchemaOptions {
@@ -22,7 +20,6 @@ interface UseSchemaOptions {
 interface UseSchemaReturn {
   nodes: SchemaNode[];
   filteredNodes: SchemaNode[];
-  stats: SchemaStats;
   loading: boolean;
   error: string | null;
   searchQuery: string;
@@ -99,7 +96,18 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
         schema: schemaName,
       });
 
-      const tableNodes = tables.map(table => tableToNode(table, schemaName));
+      const uniqueTables = Array.from(
+        tables.reduce((acc, table) => {
+          const key = `${table.schema}.${table.name}:${table.tableType}`;
+          if (!acc.has(key)) {
+            acc.set(key, table);
+          }
+          return acc;
+        }, new Map<string, Table>())
+        .values()
+      );
+
+      const tableNodes = uniqueTables.map(table => tableToNode(table, schemaName));
 
       // Update the schema node with its tables
       setNodes(prevNodes => {
@@ -280,11 +288,6 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
     return filterNodes(nodes, searchQuery, filterType);
   }, [nodes, searchQuery, filterType]);
 
-  // Calculate stats
-  const stats = useMemo(() => {
-    return calculateStats(nodes);
-  }, [nodes]);
-
   // Auto-expand nodes when searching (with loop prevention)
   useEffect(() => {
     if (searchQuery.length > 0) {
@@ -318,7 +321,6 @@ export function useSchema({ connectionId, autoLoad = true }: UseSchemaOptions): 
   return {
     nodes,
     filteredNodes,
-    stats,
     loading,
     error,
     searchQuery,

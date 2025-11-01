@@ -29,6 +29,7 @@ fn main() {
             rowflow_lib::commands::database::disconnect_database,
             rowflow_lib::commands::database::test_connection,
             rowflow_lib::commands::database::execute_query,
+            rowflow_lib::commands::database::execute_update,
             rowflow_lib::commands::database::execute_query_stream,
             rowflow_lib::commands::database::cancel_query,
             rowflow_lib::commands::database::get_backend_pid,
