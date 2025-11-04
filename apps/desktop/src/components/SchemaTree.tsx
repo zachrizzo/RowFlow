@@ -9,9 +9,11 @@ import {
   Key,
   Link as LinkIcon,
   Loader2,
+  Plus,
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
@@ -30,6 +32,14 @@ interface SchemaTreeProps {
   onTableSelect?: (schema: string, table: string) => void;
   selectedTable?: { schema: string; table: string } | null;
   loading?: boolean;
+  onCreateTable?: (schema: string) => void;
+  onDropTable?: (schema: string, table: string) => void;
+  onAddColumn?: (schema: string, table: string) => void;
+  onDropColumn?: (schema: string, table: string, column: string) => void;
+  onInsertRow?: (schema: string, table: string) => void;
+  onDeleteRows?: (schema: string, table: string) => void;
+  onDropSchema?: (schema: string) => void;
+  onRenameSchema?: (schema: string) => void;
 }
 
 interface NodeIconProps {
@@ -69,6 +79,14 @@ interface TreeNodeProps {
   onTableSelect?: (schema: string, table: string) => void;
   onViewInfo: (node: SchemaNode) => void;
   selectedTable?: { schema: string; table: string } | null;
+  onCreateTable?: (schema: string) => void;
+  onDropTable?: (schema: string, table: string) => void;
+  onAddColumn?: (schema: string, table: string) => void;
+  onDropColumn?: (schema: string, table: string, column: string) => void;
+  onInsertRow?: (schema: string, table: string) => void;
+  onDeleteRows?: (schema: string, table: string) => void;
+  onDropSchema?: (schema: string) => void;
+  onRenameSchema?: (schema: string) => void;
 }
 
 function TreeNode({
@@ -80,6 +98,14 @@ function TreeNode({
   onTableSelect,
   onViewInfo,
   selectedTable,
+  onCreateTable,
+  onDropTable,
+  onAddColumn,
+  onDropColumn,
+  onInsertRow,
+  onDeleteRows,
+  onDropSchema,
+  onRenameSchema,
 }: TreeNodeProps) {
   const hasChildren = node.children && node.children.length > 0;
   const canExpand = node.type === 'schema' || node.type === 'table' || node.type === 'view';
@@ -112,6 +138,14 @@ function TreeNode({
         node={node}
         onSampleTable={handleSampleTable}
         onViewInfo={onViewInfo}
+        onCreateTable={onCreateTable}
+        onDropTable={onDropTable}
+        onAddColumn={onAddColumn}
+        onDropColumn={onDropColumn}
+        onInsertRow={onInsertRow}
+        onDeleteRows={onDeleteRows}
+        onDropSchema={onDropSchema}
+        onRenameSchema={onRenameSchema}
       >
         <div
           className={cn(
@@ -149,11 +183,29 @@ function TreeNode({
             {node.name}
           </span>
 
-          {/* Metadata badges */}
-          {node.type === 'schema' && node.metadata?.isSystem && (
-            <Badge variant="outline" className="h-5 text-[10px] ml-auto">
-              System
-            </Badge>
+          {/* Schema actions & badges */}
+          {node.type === 'schema' && (
+            <div className="ml-auto flex items-center gap-2">
+              {onCreateTable && node.schema && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 px-2 text-xs text-muted-foreground hover:text-primary"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onCreateTable(node.schema!);
+                  }}
+                >
+                  <Plus className="mr-1 h-3 w-3" />
+                  Add Table
+                </Button>
+              )}
+              {node.metadata?.isSystem && (
+                <Badge variant="outline" className="h-5 text-[10px]">
+                  System
+                </Badge>
+              )}
+            </div>
           )}
 
           {(node.type === 'table' || node.type === 'view') && node.metadata?.rowCount !== undefined && (
@@ -201,6 +253,14 @@ function TreeNode({
               onTableSelect={onTableSelect}
               onViewInfo={onViewInfo}
               selectedTable={selectedTable}
+              onCreateTable={onCreateTable}
+              onDropTable={onDropTable}
+              onAddColumn={onAddColumn}
+              onDropColumn={onDropColumn}
+              onInsertRow={onInsertRow}
+              onDeleteRows={onDeleteRows}
+              onDropSchema={onDropSchema}
+              onRenameSchema={onRenameSchema}
             />
           ))}
         </div>
@@ -216,6 +276,14 @@ export function SchemaTree({
   onTableSelect,
   selectedTable,
   loading = false,
+  onCreateTable,
+  onDropTable,
+  onAddColumn,
+  onDropColumn,
+  onInsertRow,
+  onDeleteRows,
+  onDropSchema,
+  onRenameSchema,
 }: SchemaTreeProps) {
   const [infoNode, setInfoNode] = useState<SchemaNode | null>(null);
 
@@ -251,8 +319,8 @@ export function SchemaTree({
   }
 
   return (
-    <>
-      <ScrollArea className="h-full">
+    <div className="relative flex h-full w-full flex-col">
+      <ScrollArea className="h-full w-full">
         <div className="p-2 space-y-0.5">
           {nodes.map((node) => (
             <TreeNode
@@ -265,6 +333,14 @@ export function SchemaTree({
               onTableSelect={onTableSelect}
               onViewInfo={handleViewInfo}
               selectedTable={selectedTable}
+              onCreateTable={onCreateTable}
+              onDropTable={onDropTable}
+              onAddColumn={onAddColumn}
+              onDropColumn={onDropColumn}
+              onInsertRow={onInsertRow}
+              onDeleteRows={onDeleteRows}
+              onDropSchema={onDropSchema}
+              onRenameSchema={onRenameSchema}
             />
           ))}
         </div>
@@ -389,6 +465,6 @@ export function SchemaTree({
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

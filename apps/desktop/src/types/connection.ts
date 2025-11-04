@@ -90,9 +90,23 @@ export interface Column {
   isPrimaryKey: boolean;
   isUnique: boolean;
   isForeignKey: boolean;
+  foreignKeySchema?: string;
   foreignKeyTable?: string;
   foreignKeyColumn?: string;
   description?: string;
+}
+
+export interface ForeignKeySearchRequest {
+  schema: string;
+  table: string;
+  column: string;
+  search?: string;
+  limit?: number;
+}
+
+export interface ForeignKeySearchResult {
+  key: string;
+  row: Record<string, unknown>;
 }
 
 export interface ForeignKey {
@@ -103,6 +117,85 @@ export interface ForeignKey {
   foreignColumns: string[];
   onDelete: string;
   onUpdate: string;
+}
+
+export interface TableColumnDefinition {
+  name: string;
+  dataType: string;
+  isNullable: boolean;
+  defaultExpression?: string;
+  isPrimaryKey: boolean;
+  references?: ColumnReference;
+}
+
+export interface ColumnReference {
+  schema?: string;
+  table: string;
+  column: string;
+  onDelete?: string;
+  onUpdate?: string;
+}
+
+export interface CreateTableRequest {
+  schema: string;
+  tableName: string;
+  columns: TableColumnDefinition[];
+  ifNotExists: boolean;
+}
+
+export interface DropTableRequest {
+  schema: string;
+  tableName: string;
+  cascade: boolean;
+  ifExists: boolean;
+}
+
+export interface AddTableColumnRequest {
+  schema: string;
+  tableName: string;
+  column: TableColumnDefinition;
+  ifNotExists: boolean;
+}
+
+export interface DropTableColumnRequest {
+  schema: string;
+  tableName: string;
+  columnName: string;
+  cascade: boolean;
+  ifExists: boolean;
+}
+
+export interface TableRowData {
+  values: Record<string, any>;
+}
+
+export interface CreateSchemaRequest {
+  name: string;
+  ifNotExists: boolean;
+}
+
+export interface DropSchemaRequest {
+  name: string;
+  cascade: boolean;
+  ifExists: boolean;
+}
+
+export interface RenameSchemaRequest {
+  currentName: string;
+  newName: string;
+}
+
+export interface InsertRowRequest {
+  schema: string;
+  tableName: string;
+  row: TableRowData;
+}
+
+export interface DeleteRowRequest {
+  schema: string;
+  tableName: string;
+  criteria: TableRowData;
+  limit?: number;
 }
 
 // Connection status for UI state management

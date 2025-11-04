@@ -4,7 +4,6 @@ import {
   getCoreRowModel,
   flexRender,
   ColumnDef,
-  ColumnResizeMode,
 } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Download, Copy, FileJson, FileText, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
@@ -15,8 +14,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import { ResultCell } from './ResultCell';
-import { JsonViewerDialog } from './JsonViewerDialog';
 import { JsonSidebar } from './JsonSidebar';
 import { exportToCsv, exportToJson, copyToClipboard, formatCellValue } from '@/lib/export';
 import type { QueryResult } from '@/types/query';
@@ -223,11 +227,36 @@ export function ResultsGrid({
   sortDirection = null,
   onSortChange,
 }: ResultsGridProps) {
-  const [jsonDialogOpen, setJsonDialogOpen] = useState(false);
-  const [selectedJsonValue, setSelectedJsonValue] = useState<any>(null);
   const [jsonSidebarOpen, setJsonSidebarOpen] = useState(false);
-  const [selectedRow, setSelectedRow] = useState<Record<string, any> | null>(null);
+  const [selectedJsonRowId, setSelectedJsonRowId] = useState<string | null>(null);
+  const [selectedJsonRow, setSelectedJsonRow] = useState<Record<string, any> | null>(null);
   const { toast } = useToast();
+  const rowCount = result?.rows.length ?? 0;
+
+  const handleViewAsJson = (rowId: string, rowData: Record<string, any>) => {
+    const isSameRow = selectedJsonRowId === rowId && jsonSidebarOpen;
+    if (isSameRow) {
+      setJsonSidebarOpen(false);
+      setSelectedJsonRowId(null);
+      setSelectedJsonRow(null);
+    } else {
+      setSelectedJsonRowId(rowId);
+      setSelectedJsonRow({ ...rowData });
+      setJsonSidebarOpen(true);
+    }
+  };
+
+  const closeJsonSidebar = () => {
+    setJsonSidebarOpen(false);
+    setSelectedJsonRowId(null);
+    setSelectedJsonRow(null);
+  };
+
+  useEffect(() => {
+    if (rowCount === 0) {
+      closeJsonSidebar();
+    }
+  }, [rowCount]);
 
   // Create columns from result fields
   const columns = useMemo<ColumnDef<any>[]>(() => {
@@ -240,16 +269,30 @@ export function ResultsGrid({
         const isSorted = sortColumn === field.name;
         const currentDirection = isSorted ? sortDirection : null;
 
+        const getSortIcon = () => {
+          if (!onSortChange) return null;
+          if (currentDirection === 'asc') return <ArrowUp className="h-3 w-3 text-muted-foreground" />;
+          if (currentDirection === 'desc') return <ArrowDown className="h-3 w-3 text-muted-foreground" />;
+          return <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-70" />;
+        };
+
+        const content = (
+          <div className="w-full px-3 py-2 flex flex-col gap-0.5">
+            <span className="flex items-center gap-1">
+              <span className="font-semibold text-xs truncate">{field.name}</span>
+              {getSortIcon()}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-normal truncate">
+              {field.typeName}
+            </span>
+          </div>
+        );
+
+        if (!onSortChange) return content;
+
         const handleHeaderClick = () => {
-          if (!onSortChange) return;
-          let nextDirection: 'asc' | 'desc' | null;
-          if (!currentDirection) {
-            nextDirection = 'asc';
-          } else if (currentDirection === 'asc') {
-            nextDirection = 'desc';
-          } else {
-            nextDirection = null;
-          }
+          const nextDirection: 'asc' | 'desc' | null =
+            !currentDirection ? 'asc' : currentDirection === 'asc' ? 'desc' : null;
           onSortChange(field.name, nextDirection);
         };
 
@@ -257,23 +300,9 @@ export function ResultsGrid({
           <button
             type="button"
             onClick={handleHeaderClick}
-            className="w-full text-left px-3 py-2 flex flex-col gap-0.5 hover:bg-muted/70 transition-colors"
+            className="w-full text-left hover:bg-muted/70 transition-colors"
           >
-            <span className="flex items-center gap-1">
-              <span className="font-semibold text-xs truncate">{field.name}</span>
-              {onSortChange && (
-                currentDirection === 'asc' ? (
-                  <ArrowUp className="h-3 w-3 text-muted-foreground" />
-                ) : currentDirection === 'desc' ? (
-                  <ArrowDown className="h-3 w-3 text-muted-foreground" />
-                ) : (
-                  <ArrowUpDown className="h-3 w-3 text-muted-foreground opacity-70" />
-                )
-              )}
-            </span>
-            <span className="text-[10px] text-muted-foreground font-normal truncate">
-              {field.typeName}
-            </span>
+            {content}
           </button>
         );
       },
@@ -282,25 +311,16 @@ export function ResultsGrid({
         const rowIndex = row.index;
         const originalRow = row.original ?? {};
         const updatedRow = editedRows?.get(rowIndex);
-        const displayValue =
-          updatedRow && columnId in updatedRow
-            ? updatedRow[columnId]
-            : originalRow[columnId];
+        const displayValue = updatedRow?.[columnId] ?? originalRow[columnId];
         const originalValue = originalRow[columnId];
-        const isDirty =
-          updatedRow && columnId in updatedRow
-            ? !valuesEqual(displayValue, originalValue)
-            : false;
-
-        const hasPrimaryKeys =
-          primaryKeys.length === 0 ||
-          primaryKeys.every(
-            (pk) =>
-              originalRow[pk] !== null &&
-              originalRow[pk] !== undefined
-          );
+        const isDirty = updatedRow && columnId in updatedRow
+          ? !valuesEqual(displayValue, originalValue)
+          : false;
 
         if (editable) {
+          const hasPrimaryKeys = primaryKeys.length === 0 ||
+            primaryKeys.every((pk) => originalRow[pk] != null);
+
           if (!hasPrimaryKeys) {
             return (
               <div
@@ -313,12 +333,7 @@ export function ResultsGrid({
           }
 
           return (
-            <div
-              className={cn(
-                'h-full w-full',
-                isDirty && 'bg-yellow-500/10 dark:bg-yellow-500/20'
-              )}
-            >
+            <div className={cn('h-full w-full', isDirty && 'bg-yellow-500/10 dark:bg-yellow-500/20')}>
               <EditableCell
                 rowIndex={rowIndex}
                 columnId={columnId}
@@ -331,33 +346,31 @@ export function ResultsGrid({
           );
         }
 
-        return (
-          <ResultCell
-            value={displayValue}
-            onExpand={(val) => {
-              setSelectedJsonValue(val);
-              setJsonDialogOpen(true);
-            }}
-          />
-        );
+        return <ResultCell value={displayValue} />;
       },
       size: 200,
       minSize: 100,
       maxSize: 600,
     }));
-  }, [result, editable, editedRows, onCellEdit, sortColumn, sortDirection, onSortChange]);
-
-  const [columnResizeMode] = useState<ColumnResizeMode>('onChange');
+  }, [
+    result,
+    editable,
+    editedRows,
+    onCellEdit,
+    sortColumn,
+    sortDirection,
+    onSortChange,
+    primaryKeys,
+  ]);
 
   const reactTable = useReactTable({
     data: result?.rows || [],
     columns,
     getCoreRowModel: getCoreRowModel(),
-    columnResizeMode,
+    columnResizeMode: 'onChange',
     enableColumnResizing: true,
   });
 
-  // Virtualization
   const { rows } = reactTable.getRowModel();
   const parentRef = useMemo(() => ({ current: null as HTMLDivElement | null }), []);
 
@@ -370,12 +383,10 @@ export function ResultsGrid({
 
   const virtualRows = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
-
-  const paddingTop = virtualRows.length > 0 ? virtualRows[0]?.start || 0 : 0;
-  const paddingBottom =
-    virtualRows.length > 0
-      ? totalSize - (virtualRows[virtualRows.length - 1]?.end || 0)
-      : 0;
+  const paddingTop = virtualRows[0]?.start ?? 0;
+  const paddingBottom = virtualRows.length > 0
+    ? totalSize - (virtualRows[virtualRows.length - 1]?.end ?? 0)
+    : 0;
 
   // Export handlers
   const handleExportCsv = () => {
@@ -539,38 +550,45 @@ export function ResultsGrid({
             {virtualRows.map((virtualRow) => {
               const row = rows[virtualRow.index];
               if (!row) return null;
+
+              const isSelected = jsonSidebarOpen && selectedJsonRowId === row.id;
+              const isEdited = editable && editedRows?.has(row.index);
+              const isEven = virtualRow.index % 2 === 0;
+
+              const rowClassName = cn(
+                'border-b transition-colors',
+                isEdited
+                  ? 'bg-yellow-500/5 hover:bg-yellow-500/10 dark:bg-yellow-500/10 dark:hover:bg-yellow-500/20'
+                  : isEven
+                    ? 'bg-background hover:bg-muted/30'
+                    : 'bg-muted/10 hover:bg-muted/30',
+                isSelected && 'ring-2 ring-primary'
+              );
+
               return (
-                <tr
-                  key={row.id}
-                  className={cn(
-                    'border-b transition-colors',
-                    editable && editedRows?.has(row.index)
-                      ? 'bg-yellow-500/5 hover:bg-yellow-500/10 dark:bg-yellow-500/10 dark:hover:bg-yellow-500/20'
-                      : virtualRow.index % 2 === 0
-                        ? 'bg-background hover:bg-muted/30'
-                        : 'bg-muted/10 hover:bg-muted/30',
-                    selectedRow === row.original && 'ring-2 ring-primary'
-                  )}
-                  onContextMenu={(e) => {
-                    // Prevent default browser context menu
-                    e.preventDefault();
-                    // Only open sidebar if we have table context
-                    if (schema && table && connectionId) {
-                      setSelectedRow(row.original);
-                      setJsonSidebarOpen(true);
-                    }
-                  }}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className="border-r last:border-r-0 h-[35px]"
-                      style={{ width: cell.column.getSize() }}
+                <ContextMenu key={row.id}>
+                  <ContextMenuTrigger asChild>
+                    <tr className={rowClassName}>
+                      {row.getVisibleCells().map((cell) => (
+                        <td
+                          key={cell.id}
+                          className="border-r last:border-r-0 h-[35px]"
+                          style={{ width: cell.column.getSize() }}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem
+                      onClick={() => handleViewAsJson(row.id, row.original as Record<string, any>)}
                     >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
+                      <FileJson className="mr-2 h-4 w-4" />
+                      View as JSON
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
               );
             })}
             {paddingBottom > 0 && (
@@ -598,24 +616,15 @@ export function ResultsGrid({
         )}
       </div>
 
-      {/* JSON viewer dialog */}
-      <JsonViewerDialog
-        open={jsonDialogOpen}
-        onOpenChange={setJsonDialogOpen}
-        value={selectedJsonValue}
-      />
-
       {/* JSON Sidebar */}
-      {schema && table && connectionId && (
-        <JsonSidebar
-          open={jsonSidebarOpen}
-          onOpenChange={setJsonSidebarOpen}
-          rowData={selectedRow}
-          connectionId={connectionId}
-          schema={schema}
-          table={table}
-        />
-      )}
+      <JsonSidebar
+        open={jsonSidebarOpen}
+        onOpenChange={setJsonSidebarOpen}
+        rowData={selectedJsonRow}
+        connectionId={connectionId}
+        schema={schema}
+        table={table}
+      />
     </div>
   );
 }

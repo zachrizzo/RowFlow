@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use typeshare::typeshare;
 
+use std::collections::BTreeMap;
+
 /// Connection profile for PostgreSQL database
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,6 +129,7 @@ pub struct Column {
     pub is_primary_key: bool,
     pub is_unique: bool,
     pub is_foreign_key: bool,
+    pub foreign_key_schema: Option<String>,
     pub foreign_key_table: Option<String>,
     pub foreign_key_column: Option<String>,
     pub description: Option<String>,
@@ -206,4 +209,152 @@ pub struct Constraint {
     pub constraint_type: String, // PRIMARY KEY, FOREIGN KEY, UNIQUE, CHECK
     pub columns: Vec<String>,
     pub definition: Option<String>,
+}
+
+/// Definition for creating or altering table columns
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableColumnDefinition {
+    pub name: String,
+    pub data_type: String,
+    pub is_nullable: bool,
+    pub default_expression: Option<String>,
+    pub is_primary_key: bool,
+    pub references: Option<ColumnReference>,
+}
+
+/// Foreign key reference details for a column
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnReference {
+    pub schema: Option<String>,
+    pub table: String,
+    pub column: String,
+    pub on_delete: Option<String>,
+    pub on_update: Option<String>,
+}
+
+/// Request payload for creating a new table
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTableRequest {
+    pub schema: String,
+    pub table_name: String,
+    pub columns: Vec<TableColumnDefinition>,
+    pub if_not_exists: bool,
+}
+
+/// Request payload for dropping a table
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropTableRequest {
+    pub schema: String,
+    pub table_name: String,
+    pub cascade: bool,
+    pub if_exists: bool,
+}
+
+/// Request payload for adding a column to an existing table
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddTableColumnRequest {
+    pub schema: String,
+    pub table_name: String,
+    pub column: TableColumnDefinition,
+    pub if_not_exists: bool,
+}
+
+/// Request payload for dropping a column from an existing table
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropTableColumnRequest {
+    pub schema: String,
+    pub table_name: String,
+    pub column_name: String,
+    pub cascade: bool,
+    pub if_exists: bool,
+}
+
+/// Row payload used for inserts and deletes
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableRowData {
+    pub values: BTreeMap<String, serde_json::Value>,
+}
+
+/// Request payload for creating a schema
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSchemaRequest {
+    pub name: String,
+    pub if_not_exists: bool,
+}
+
+/// Request payload for dropping a schema
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DropSchemaRequest {
+    pub name: String,
+    pub cascade: bool,
+    pub if_exists: bool,
+}
+
+/// Request payload for renaming a schema
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenameSchemaRequest {
+    pub current_name: String,
+    pub new_name: String,
+}
+
+/// Request payload for inserting a row
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InsertRowRequest {
+    pub schema: String,
+    pub table_name: String,
+    pub row: TableRowData,
+}
+
+/// Request payload for deleting rows based on criteria
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteRowRequest {
+    pub schema: String,
+    pub table_name: String,
+    pub criteria: TableRowData,
+    pub limit: Option<u32>,
+}
+
+/// Request payload for searching foreign key candidates
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForeignKeySearchRequest {
+    pub schema: String,
+    pub table: String,
+    pub column: String,
+    pub search: Option<String>,
+    pub limit: Option<i64>,
+}
+
+/// Result returned when searching for foreign key candidates
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForeignKeySearchResult {
+    pub key: String,
+    pub row: serde_json::Value,
 }

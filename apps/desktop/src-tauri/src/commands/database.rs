@@ -1,6 +1,10 @@
-use crate::error::Result;
+use super::schema::{qualified_table_name, quote_identifier, validate_identifier};
+use crate::error::{Result, RowFlowError};
 use crate::state::AppState;
-use crate::types::{ConnectionInfo, ConnectionProfile, FieldInfo, QueryResult};
+use crate::types::{
+    ConnectionInfo, ConnectionProfile, DeleteRowRequest, FieldInfo, ForeignKeySearchRequest,
+    ForeignKeySearchResult, InsertRowRequest, QueryResult,
+};
 use serde_json::Value;
 use std::time::Instant;
 use tauri::State;
@@ -96,28 +100,11 @@ pub async fn execute_query(
     let fields: Vec<FieldInfo> = statement
         .columns()
         .iter()
-        .map(|col| {
-            let type_name = match col.type_() {
-                &Type::BOOL => "boolean",
-                &Type::INT2 | &Type::INT4 | &Type::INT8 => "integer",
-                &Type::FLOAT4 | &Type::FLOAT8 => "float",
-                &Type::NUMERIC => "numeric",
-                &Type::TEXT | &Type::VARCHAR | &Type::BPCHAR => "text",
-                &Type::BYTEA => "bytea",
-                &Type::TIMESTAMP | &Type::TIMESTAMPTZ => "timestamp",
-                &Type::DATE => "date",
-                &Type::TIME | &Type::TIMETZ => "time",
-                &Type::UUID => "uuid",
-                &Type::JSON | &Type::JSONB => "json",
-                _ => col.type_().name(),
-            };
-
-            FieldInfo {
-                name: col.name().to_string(),
-                type_oid: col.type_().oid(),
-                type_name: type_name.to_string(),
-                nullable: true, // PostgreSQL doesn't provide this info easily
-            }
+        .map(|col| FieldInfo {
+            name: col.name().to_string(),
+            type_oid: col.type_().oid(),
+            type_name: pg_type_to_name(col.type_()).to_string(),
+            nullable: true, // PostgreSQL doesn't provide this info easily
         })
         .collect();
 
@@ -159,11 +146,7 @@ pub async fn execute_update(
     let affected = client.execute(&statement, &[]).await?;
 
     let duration = start.elapsed().as_secs_f64() * 1000.0;
-    log::info!(
-        "Update completed: {} rows affected in {:.2}ms",
-        affected,
-        duration
-    );
+    log::info!("Update completed: {} rows affected in {:.2}ms", affected, duration);
 
     Ok(affected)
 }
@@ -210,28 +193,11 @@ pub async fn execute_query_stream(
     let fields: Vec<FieldInfo> = statement
         .columns()
         .iter()
-        .map(|col| {
-            let type_name = match col.type_() {
-                &Type::BOOL => "boolean",
-                &Type::INT2 | &Type::INT4 | &Type::INT8 => "integer",
-                &Type::FLOAT4 | &Type::FLOAT8 => "float",
-                &Type::NUMERIC => "numeric",
-                &Type::TEXT | &Type::VARCHAR | &Type::BPCHAR => "text",
-                &Type::BYTEA => "bytea",
-                &Type::TIMESTAMP | &Type::TIMESTAMPTZ => "timestamp",
-                &Type::DATE => "date",
-                &Type::TIME | &Type::TIMETZ => "time",
-                &Type::UUID => "uuid",
-                &Type::JSON | &Type::JSONB => "json",
-                _ => col.type_().name(),
-            };
-
-            FieldInfo {
-                name: col.name().to_string(),
-                type_oid: col.type_().oid(),
-                type_name: type_name.to_string(),
-                nullable: true,
-            }
+        .map(|col| FieldInfo {
+            name: col.name().to_string(),
+            type_oid: col.type_().oid(),
+            type_name: pg_type_to_name(col.type_()).to_string(),
+            nullable: true,
         })
         .collect();
 
@@ -253,11 +219,66 @@ pub async fn execute_query_stream(
     Ok(QueryResult { fields, rows: row_values, row_count, execution_time, has_more })
 }
 
+/// Map PostgreSQL type to a simplified type name string
+fn pg_type_to_name(pg_type: &Type) -> &str {
+    match pg_type {
+        &Type::BOOL => "boolean",
+        &Type::INT2 | &Type::INT4 | &Type::INT8 => "integer",
+        &Type::FLOAT4 | &Type::FLOAT8 => "float",
+        &Type::NUMERIC => "numeric",
+        &Type::TEXT | &Type::VARCHAR | &Type::BPCHAR => "text",
+        &Type::BYTEA => "bytea",
+        &Type::TIMESTAMP | &Type::TIMESTAMPTZ => "timestamp",
+        &Type::DATE => "date",
+        &Type::TIME | &Type::TIMETZ => "time",
+        &Type::UUID => "uuid",
+        &Type::JSON | &Type::JSONB => "json",
+        _ => pg_type.name(),
+    }
+}
+
 /// Normalize SQL so it can be wrapped inside a subquery without syntax errors.
 fn sanitize_sql_for_wrapping(sql: &str) -> String {
     let trimmed = sql.trim();
     let sanitized = trimmed.trim_end_matches(&[';', ' ', '\t', '\n', '\r']);
     sanitized.to_string()
+}
+
+fn escape_sql_string(value: &str) -> String {
+    value.replace('\'', "''")
+}
+
+fn value_to_sql_literal(value: &Value) -> String {
+    match value {
+        Value::Null => "NULL".to_string(),
+        Value::Bool(b) => {
+            if *b {
+                "TRUE".to_string()
+            } else {
+                "FALSE".to_string()
+            }
+        }
+        Value::Number(num) => {
+            if let Some(i) = num.as_i64() {
+                i.to_string()
+            } else if let Some(u) = num.as_u64() {
+                u.to_string()
+            } else if let Some(f) = num.as_f64() {
+                if f.is_finite() {
+                    f.to_string()
+                } else {
+                    "NULL".to_string()
+                }
+            } else {
+                "NULL".to_string()
+            }
+        }
+        Value::String(text) => format!("'{}'", escape_sql_string(text)),
+        Value::Array(_) | Value::Object(_) => match serde_json::to_string(value) {
+            Ok(json) => format!("'{}'::jsonb", escape_sql_string(&json)),
+            Err(_) => "NULL".to_string(),
+        },
+    }
 }
 
 /// Cancel a running query
@@ -289,6 +310,163 @@ pub async fn get_backend_pid(state: State<'_, AppState>, connection_id: String) 
     let pid: i32 = row.get(0);
 
     Ok(pid)
+}
+
+/// Insert a single row into a table
+#[tauri::command]
+pub async fn insert_table_row(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: InsertRowRequest,
+) -> Result<u64> {
+    log::info!(
+        "Inserting row into table {}.{} on connection: {}",
+        request.schema,
+        request.table_name,
+        connection_id
+    );
+
+    if request.row.values.is_empty() {
+        return Err(RowFlowError::SchemaError(
+            "Insert request must include at least one column".to_string(),
+        ));
+    }
+
+    let table = qualified_table_name(&request.schema, &request.table_name)?;
+
+    let mut columns = Vec::with_capacity(request.row.values.len());
+    let mut values = Vec::with_capacity(request.row.values.len());
+
+    for (column, value) in &request.row.values {
+        validate_identifier(column, "column")?;
+        columns.push(quote_identifier(column));
+        values.push(value_to_sql_literal(value));
+    }
+
+    let sql = format!(
+        "INSERT INTO {} ({}) VALUES ({});",
+        table,
+        columns.join(", "),
+        values.join(", ")
+    );
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    let affected = client.execute(sql.as_str(), &[]).await?;
+    Ok(affected)
+}
+
+/// Search for candidate rows that can satisfy a foreign key reference
+#[tauri::command]
+pub async fn search_foreign_key_targets(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: ForeignKeySearchRequest,
+) -> Result<Vec<ForeignKeySearchResult>> {
+    log::info!(
+        "Searching foreign key targets for {}.{} ({}) on connection: {}",
+        request.schema, request.table, request.column, connection_id
+    );
+
+    validate_identifier(&request.schema, "schema")?;
+    validate_identifier(&request.table, "table")?;
+    validate_identifier(&request.column, "column")?;
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    let qualified_table = qualified_table_name(&request.schema, &request.table)?;
+    let column_ident = quote_identifier(&request.column);
+
+    let pattern = request
+        .search
+        .as_ref()
+        .map(|term| term.trim())
+        .filter(|term| !term.is_empty())
+        .map(|term| format!("%{term}%"));
+
+    let limit = request
+        .limit
+        .unwrap_or(20)
+        .clamp(1, 200);
+
+    let sql = format!(
+        "SELECT ({column})::text AS key, row_to_json(t) AS row \
+         FROM {table} AS t \
+         WHERE ($1::text IS NULL OR ({column})::text ILIKE $1) \
+         ORDER BY ({column})::text \
+         LIMIT $2",
+        column = column_ident,
+        table = qualified_table
+    );
+
+    let rows = client
+        .query(
+            &sql,
+            &[&pattern, &limit],
+        )
+        .await?;
+
+    let results = rows
+        .into_iter()
+        .map(|row| ForeignKeySearchResult {
+            key: row.get(0),
+            row: row.get(1),
+        })
+        .collect();
+
+    Ok(results)
+}
+
+/// Delete rows from a table matching the provided criteria
+#[tauri::command]
+pub async fn delete_table_rows(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: DeleteRowRequest,
+) -> Result<u64> {
+    log::info!(
+        "Deleting rows from table {}.{} on connection: {}",
+        request.schema,
+        request.table_name,
+        connection_id
+    );
+
+    if request.criteria.values.is_empty() {
+        return Err(RowFlowError::SchemaError(
+            "Delete request must include at least one criteria column".to_string(),
+        ));
+    }
+
+    let table = qualified_table_name(&request.schema, &request.table_name)?;
+
+    let mut predicates = Vec::with_capacity(request.criteria.values.len());
+    for (column, value) in &request.criteria.values {
+        validate_identifier(column, "column")?;
+        let ident = quote_identifier(column);
+        let predicate = if value.is_null() {
+            format!("{ident} IS NULL")
+        } else {
+            format!("{ident} = {}", value_to_sql_literal(value))
+        };
+        predicates.push(predicate);
+    }
+
+    let limit_clause = request.limit.map(|limit| format!(" LIMIT {}", limit)).unwrap_or_default();
+
+    let sql = format!(
+        "DELETE FROM {} WHERE {}{};",
+        table,
+        predicates.join(" AND "),
+        limit_clause
+    );
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    let affected = client.execute(sql.as_str(), &[]).await?;
+    Ok(affected)
 }
 
 /// Helper function to convert a PostgreSQL row value to JSON

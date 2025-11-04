@@ -10,7 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Info,
+  Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -49,6 +49,7 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
 
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [connectingProfileId, setConnectingProfileId] = useState<string | null>(null);
+  const [viewingDetailsProfileId, setViewingDetailsProfileId] = useState<string | null>(null);
 
   const handleConnect = async (profile: StoredProfile) => {
     setConnectingProfileId(profile.id);
@@ -178,61 +179,53 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="h-8 w-8"
                         >
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        {status === 'connected' ? (
-                          <DropdownMenuItem
-                            onClick={() => handleDisconnect(profile.id)}
-                          >
-                            <PowerOff className="mr-2 h-4 w-4" />
-                            Disconnect
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem
-                            onClick={() => handleConnect(profile)}
-                            disabled={isConnecting}
-                          >
-                            <Power className="mr-2 h-4 w-4" />
-                            Connect
-                          </DropdownMenuItem>
-                        )}
+                        <DropdownMenuItem
+                          onClick={() => setViewingDetailsProfileId(profile.id)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          View Details
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
                         {!profile.isMcpManaged && (
-                          <>
-                            <DropdownMenuItem
-                              onClick={() => onEditProfile?.(profile)}
-                            >
-                              <Edit className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => setDeletingProfileId(profile.id)}
-                              className="text-destructive"
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                        {profile.isMcpManaged && (
-                          <DropdownMenuItem disabled>
-                            <Info className="mr-2 h-4 w-4" />
-                            MCP-managed (read-only)
+                          <DropdownMenuItem
+                            onClick={() => onEditProfile?.(profile)}
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuItem
+                          onClick={() => setDeletingProfileId(profile.id)}
+                          className="text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
                 </div>
               </div>
 
-              {/* Quick Connect Button */}
-              {!isActive && status !== 'connected' && (
-                <div className="mt-2 pt-2 border-t">
+              {/* Connect/Disconnect Button */}
+              <div className="mt-2 pt-2 border-t">
+                {status === 'connected' ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => handleDisconnect(profile.id)}
+                  >
+                    <PowerOff className="mr-2 h-3 w-3" />
+                    Disconnect
+                  </Button>
+                ) : (
                   <Button
                     variant="outline"
                     size="sm"
@@ -252,22 +245,8 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
                       </>
                     )}
                   </Button>
-                </div>
-              )}
-
-              {status === 'connected' && (
-                <div className="mt-2 pt-2 border-t">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleDisconnect(profile.id)}
-                  >
-                    <PowerOff className="mr-2 h-3 w-3" />
-                    Disconnect
-                  </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           );
         })}
@@ -295,6 +274,245 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
             </Button>
             <Button variant="destructive" onClick={handleDeleteConfirm}>
               Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Connection Details Dialog */}
+      <Dialog
+        open={!!viewingDetailsProfileId}
+        onOpenChange={(open) => !open && setViewingDetailsProfileId(null)}
+      >
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Connection Details
+            </DialogTitle>
+            <DialogDescription>
+              Complete information about this connection profile
+            </DialogDescription>
+          </DialogHeader>
+          {viewingDetailsProfileId && (() => {
+            const profile = profiles.find(p => p.id === viewingDetailsProfileId);
+            if (!profile) return null;
+            
+            const connection = connections.get(profile.id);
+            const status = getConnectionStatus(profile.id);
+
+            return (
+              <div className="space-y-4">
+                {/* Basic Information */}
+                <div className="space-y-2">
+                  <h4 className="font-semibold text-sm">Basic Information</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Name:</span>
+                      <p className="font-medium">{profile.name}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Status:</span>
+                      <p className="font-medium capitalize">
+                        {status === 'connected' ? (
+                          <span className="text-green-500">Connected</span>
+                        ) : status === 'error' ? (
+                          <span className="text-destructive">Error</span>
+                        ) : status === 'connecting' ? (
+                          <span className="text-primary">Connecting...</span>
+                        ) : (
+                          <span>Disconnected</span>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Host:</span>
+                      <p className="font-mono text-xs">{profile.host}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Port:</span>
+                      <p className="font-mono text-xs">{profile.port}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Database:</span>
+                      <p className="font-mono text-xs">{profile.database}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Username:</span>
+                      <p className="font-mono text-xs">{profile.username}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Read-only:</span>
+                      <p className="font-medium">{profile.readOnly ? 'Yes' : 'No'}</p>
+                    </div>
+                    {profile.isMcpManaged !== undefined && (
+                      <div>
+                        <span className="text-muted-foreground">MCP Managed:</span>
+                        <p className="font-medium">{profile.isMcpManaged ? 'Yes' : 'No'}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Connection Info (if connected) */}
+                {connection?.connectionInfo && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <h4 className="font-semibold text-sm">Active Connection</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Server Version:</span>
+                        <p className="font-mono text-xs">{connection.connectionInfo.serverVersion}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Session User:</span>
+                        <p className="font-mono text-xs">{connection.connectionInfo.sessionUser}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Current Schema:</span>
+                        <p className="font-mono text-xs">{connection.connectionInfo.currentSchema}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Server Encoding:</span>
+                        <p className="font-mono text-xs">{connection.connectionInfo.serverEncoding}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Client Encoding:</span>
+                        <p className="font-mono text-xs">{connection.connectionInfo.clientEncoding}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Superuser:</span>
+                        <p className="font-medium">{connection.connectionInfo.isSuperuser ? 'Yes' : 'No'}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* SSH Configuration */}
+                {profile.useSsh && profile.sshConfig && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <h4 className="font-semibold text-sm">SSH Configuration</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">SSH Host:</span>
+                        <p className="font-mono text-xs">{profile.sshConfig.host}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">SSH Port:</span>
+                        <p className="font-mono text-xs">{profile.sshConfig.port}</p>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">SSH Username:</span>
+                        <p className="font-mono text-xs">{profile.sshConfig.username}</p>
+                      </div>
+                      {profile.sshConfig.privateKeyPath && (
+                        <div>
+                          <span className="text-muted-foreground">Private Key:</span>
+                          <p className="font-mono text-xs truncate">{profile.sshConfig.privateKeyPath}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* TLS Configuration */}
+                {profile.tlsConfig?.enabled && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <h4 className="font-semibold text-sm">TLS/SSL Configuration</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Verify CA:</span>
+                        <p className="font-medium">{profile.tlsConfig.verifyCa ? 'Yes' : 'No'}</p>
+                      </div>
+                      {profile.tlsConfig.caCertPath && (
+                        <div>
+                          <span className="text-muted-foreground">CA Certificate:</span>
+                          <p className="font-mono text-xs truncate">{profile.tlsConfig.caCertPath}</p>
+                        </div>
+                      )}
+                      {profile.tlsConfig.clientCertPath && (
+                        <div>
+                          <span className="text-muted-foreground">Client Certificate:</span>
+                          <p className="font-mono text-xs truncate">{profile.tlsConfig.clientCertPath}</p>
+                        </div>
+                      )}
+                      {profile.tlsConfig.clientKeyPath && (
+                        <div>
+                          <span className="text-muted-foreground">Client Key:</span>
+                          <p className="font-mono text-xs truncate">{profile.tlsConfig.clientKeyPath}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Timeout Settings */}
+                {(profile.connectionTimeout || profile.statementTimeout || profile.lockTimeout || profile.idleTimeout) && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <h4 className="font-semibold text-sm">Timeout Settings</h4>
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      {profile.connectionTimeout !== undefined && (
+                        <div>
+                          <span className="text-muted-foreground">Connection Timeout:</span>
+                          <p className="font-mono text-xs">{profile.connectionTimeout}s</p>
+                        </div>
+                      )}
+                      {profile.statementTimeout !== undefined && (
+                        <div>
+                          <span className="text-muted-foreground">Statement Timeout:</span>
+                          <p className="font-mono text-xs">{profile.statementTimeout}ms</p>
+                        </div>
+                      )}
+                      {profile.lockTimeout !== undefined && (
+                        <div>
+                          <span className="text-muted-foreground">Lock Timeout:</span>
+                          <p className="font-mono text-xs">{profile.lockTimeout}ms</p>
+                        </div>
+                      )}
+                      {profile.idleTimeout !== undefined && (
+                        <div>
+                          <span className="text-muted-foreground">Idle Timeout:</span>
+                          <p className="font-mono text-xs">{profile.idleTimeout}s</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Metadata */}
+                <div className="space-y-2 pt-2 border-t">
+                  <h4 className="font-semibold text-sm">Metadata</h4>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Profile ID:</span>
+                      <p className="font-mono text-xs">{profile.id}</p>
+                    </div>
+                    {profile.createdAt && (
+                      <div>
+                        <span className="text-muted-foreground">Created:</span>
+                        <p className="font-mono text-xs">
+                          {new Date(profile.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                    {profile.updatedAt && (
+                      <div>
+                        <span className="text-muted-foreground">Last Updated:</span>
+                        <p className="font-mono text-xs">
+                          {new Date(profile.updatedAt).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setViewingDetailsProfileId(null)}
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -33,6 +33,9 @@ fn main() {
             rowflow_lib::commands::database::execute_query_stream,
             rowflow_lib::commands::database::cancel_query,
             rowflow_lib::commands::database::get_backend_pid,
+            rowflow_lib::commands::database::insert_table_row,
+            rowflow_lib::commands::database::search_foreign_key_targets,
+            rowflow_lib::commands::database::delete_table_rows,
             rowflow_lib::commands::database::list_mcp_profiles,
             // Schema introspection commands
             rowflow_lib::commands::schema::list_schemas,
@@ -43,6 +46,13 @@ fn main() {
             rowflow_lib::commands::schema::get_table_stats,
             rowflow_lib::commands::schema::get_foreign_keys,
             rowflow_lib::commands::schema::get_constraints,
+            rowflow_lib::commands::schema::create_schema,
+            rowflow_lib::commands::schema::drop_schema,
+            rowflow_lib::commands::schema::rename_schema,
+            rowflow_lib::commands::schema::create_table,
+            rowflow_lib::commands::schema::drop_table,
+            rowflow_lib::commands::schema::add_table_column,
+            rowflow_lib::commands::schema::drop_table_column,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

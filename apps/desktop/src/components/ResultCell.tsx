@@ -1,20 +1,18 @@
-import { useState } from 'react';
 import { Check, X, Braces, List } from 'lucide-react';
 import { formatCellValue, getValueType, copyCellToClipboard } from '@/lib/export';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 export interface ResultCellProps {
-  value: any;
-  onExpand?: (value: any) => void;
+  value: unknown;
 }
 
-export function ResultCell({ value, onExpand }: ResultCellProps) {
-  const [isHovered, setIsHovered] = useState(false);
+export function ResultCell({ value }: ResultCellProps) {
   const { toast } = useToast();
   const valueType = getValueType(value);
 
-  const handleClick = async () => {
+  const handleClick = async (event: React.MouseEvent) => {
+    event.stopPropagation();
     try {
       await copyCellToClipboard(value);
       toast({
@@ -27,12 +25,6 @@ export function ResultCell({ value, onExpand }: ResultCellProps) {
         description: 'Failed to copy cell value',
         variant: 'destructive',
       });
-    }
-  };
-
-  const handleDoubleClick = () => {
-    if ((valueType === 'object' || valueType === 'array') && onExpand) {
-      onExpand(value);
     }
   };
 
@@ -58,7 +50,7 @@ export function ResultCell({ value, onExpand }: ResultCellProps) {
 
       case 'number':
         return (
-          <span className="font-mono text-xs tabular-nums">{value}</span>
+          <span className="font-mono text-xs tabular-nums">{value as number}</span>
         );
 
       case 'object':
@@ -101,20 +93,12 @@ export function ResultCell({ value, onExpand }: ResultCellProps) {
   return (
     <div
       className={cn(
-        'px-3 py-2 h-full flex items-center cursor-pointer transition-colors',
+        'px-3 py-2 h-full flex items-center transition-colors cursor-pointer',
         'hover:bg-accent/50',
-        valueType === 'number' && 'justify-end',
-        isHovered && 'ring-1 ring-primary/50 ring-inset'
+        valueType === 'number' && 'justify-end'
       )}
       onClick={handleClick}
-      onDoubleClick={handleDoubleClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      title={
-        valueType === 'object' || valueType === 'array'
-          ? 'Click to copy, double-click to expand'
-          : 'Click to copy'
-      }
+      title="Click to copy"
     >
       {renderValue()}
     </div>

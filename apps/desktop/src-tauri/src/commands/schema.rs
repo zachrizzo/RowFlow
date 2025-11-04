@@ -1,8 +1,119 @@
-use crate::error::Result;
+use crate::error::{Result, RowFlowError};
 use crate::state::AppState;
-use crate::types::{Column, Constraint, ForeignKey, Index, Schema, Table, TableStats};
-use std::collections::BTreeMap;
+use crate::types::{
+    AddTableColumnRequest, Column, ColumnReference, Constraint, CreateSchemaRequest,
+    CreateTableRequest, DropSchemaRequest, DropTableColumnRequest, DropTableRequest, ForeignKey,
+    Index, RenameSchemaRequest, Schema, Table, TableColumnDefinition, TableStats,
+};
+use std::collections::{BTreeMap, HashSet};
 use tauri::State;
+
+/// Ensure the provided identifier is safe to use in generated SQL
+pub(crate) fn validate_identifier(identifier: &str, label: &str) -> Result<()> {
+    if identifier.trim().is_empty() {
+        return Err(RowFlowError::SchemaError(format!("{label} name cannot be empty")));
+    }
+
+    if identifier.contains('\0') {
+        return Err(RowFlowError::SchemaError(format!("{label} name contains invalid characters")));
+    }
+
+    Ok(())
+}
+
+/// Quote an identifier for safe usage in SQL statements
+pub(crate) fn quote_identifier(identifier: &str) -> String {
+    let mut quoted = String::with_capacity(identifier.len() + 2);
+    quoted.push('"');
+    for ch in identifier.chars() {
+        if ch == '"' {
+            quoted.push('"');
+        }
+        quoted.push(ch);
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// Convenience helper for `schema.table` formatting with validation
+pub(crate) fn qualified_table_name(schema: &str, table: &str) -> Result<String> {
+    validate_identifier(schema, "schema")?;
+    validate_identifier(table, "table")?;
+    Ok(format!("{}.{}", quote_identifier(schema), quote_identifier(table)))
+}
+
+fn build_column_definition(
+    column: &TableColumnDefinition,
+    inline_primary_key: bool,
+) -> Result<String> {
+    validate_identifier(&column.name, "column")?;
+
+    let mut parts = vec![format!("{} {}", quote_identifier(&column.name), column.data_type.trim())];
+
+    if !column.is_nullable {
+        parts.push("NOT NULL".to_string());
+    }
+
+    if let Some(default) = &column.default_expression {
+        let trimmed = default.trim();
+        if !trimmed.is_empty() {
+            parts.push(format!("DEFAULT {trimmed}"));
+        }
+    }
+
+    if inline_primary_key && column.is_primary_key {
+        parts.push("PRIMARY KEY".to_string());
+    }
+
+    if let Some(reference) = &column.references {
+        parts.push(build_reference_clause(reference)?);
+    }
+
+    Ok(parts.join(" "))
+}
+
+fn build_reference_clause(reference: &ColumnReference) -> Result<String> {
+    let table = reference.table.trim();
+    let column = reference.column.trim();
+    if table.is_empty() || column.is_empty() {
+        return Err(RowFlowError::SchemaError(
+            "Foreign key requires target table and column".to_string(),
+        ));
+    }
+
+    if let Some(schema) = &reference.schema {
+        validate_identifier(schema, "schema")?;
+    }
+    validate_identifier(table, "table")?;
+    validate_identifier(column, "column")?;
+
+    let mut clause = String::from("REFERENCES ");
+    if let Some(schema) = &reference.schema {
+        clause.push_str(&format!("{}.", quote_identifier(schema)));
+    }
+    clause.push_str(&format!("{}({})", quote_identifier(table), quote_identifier(column)));
+
+    if let Some(on_delete) = reference.on_delete.as_ref().and_then(|s| parse_fk_action(s)) {
+        clause.push_str(&format!(" ON DELETE {on_delete}"));
+    }
+
+    if let Some(on_update) = reference.on_update.as_ref().and_then(|s| parse_fk_action(s)) {
+        clause.push_str(&format!(" ON UPDATE {on_update}"));
+    }
+
+    Ok(clause)
+}
+
+fn parse_fk_action(action: &str) -> Option<&'static str> {
+    match action.to_uppercase().as_str() {
+        "CASCADE" => Some("CASCADE"),
+        "SET NULL" => Some("SET NULL"),
+        "SET DEFAULT" => Some("SET DEFAULT"),
+        "RESTRICT" => Some("RESTRICT"),
+        "NO ACTION" => Some("NO ACTION"),
+        _ => None,
+    }
+}
 
 /// List all schemas in the database
 #[tauri::command]
@@ -177,6 +288,19 @@ pub async fn get_table_columns(
                 LIMIT 1
             ) AS foreign_key_table,
             (
+                SELECT ccu.table_schema
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                    ON tc.constraint_name = kcu.constraint_name
+                JOIN information_schema.constraint_column_usage ccu
+                    ON ccu.constraint_name = tc.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                    AND tc.table_schema = c.table_schema
+                    AND tc.table_name = c.table_name
+                    AND kcu.column_name = c.column_name
+                LIMIT 1
+            ) AS foreign_key_schema,
+            (
                 SELECT ccu.column_name
                 FROM information_schema.table_constraints tc
                 JOIN information_schema.key_column_usage kcu
@@ -214,9 +338,10 @@ pub async fn get_table_columns(
             is_primary_key: row.get(7),
             is_unique: row.get(8),
             is_foreign_key: row.get(9),
+            foreign_key_schema: row.get(11),
             foreign_key_table: row.get(10),
-            foreign_key_column: row.get(11),
-            description: row.get(12),
+            foreign_key_column: row.get(12),
+            description: row.get(13),
         })
         .collect();
 
@@ -516,4 +641,334 @@ pub async fn get_constraints(
         .collect();
 
     Ok(constraints)
+}
+
+/// Create a new schema in the database
+#[tauri::command]
+pub async fn create_schema(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: CreateSchemaRequest,
+) -> Result<()> {
+    log::info!("Creating schema: {} on connection: {}", request.name, connection_id);
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    validate_identifier(&request.name, "schema")?;
+
+    let if_not_exists = if request.if_not_exists { "IF NOT EXISTS " } else { "" };
+    let sql = format!(
+        "CREATE SCHEMA {}{};",
+        if_not_exists,
+        quote_identifier(&request.name)
+    );
+
+    client.batch_execute(&sql).await?;
+
+    Ok(())
+}
+
+/// Drop an existing schema
+#[tauri::command]
+pub async fn drop_schema(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: DropSchemaRequest,
+) -> Result<()> {
+    log::info!("Dropping schema: {} on connection: {}", request.name, connection_id);
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    validate_identifier(&request.name, "schema")?;
+
+    let if_exists = if request.if_exists { "IF EXISTS " } else { "" };
+    let cascade = if request.cascade { " CASCADE" } else { "" };
+    let sql = format!(
+        "DROP SCHEMA {}{}{};",
+        if_exists,
+        quote_identifier(&request.name),
+        cascade
+    );
+
+    client.batch_execute(&sql).await?;
+
+    Ok(())
+}
+
+/// Rename an existing schema
+#[tauri::command]
+pub async fn rename_schema(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: RenameSchemaRequest,
+) -> Result<()> {
+    log::info!(
+        "Renaming schema: {} -> {} on connection: {}",
+        request.current_name,
+        request.new_name,
+        connection_id
+    );
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    validate_identifier(&request.current_name, "schema")?;
+    validate_identifier(&request.new_name, "schema")?;
+
+    let sql = format!(
+        "ALTER SCHEMA {} RENAME TO {};",
+        quote_identifier(&request.current_name),
+        quote_identifier(&request.new_name)
+    );
+
+    client.batch_execute(&sql).await?;
+
+    Ok(())
+}
+
+/// Create a new table using the provided column definitions
+#[tauri::command]
+pub async fn create_table(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: CreateTableRequest,
+) -> Result<()> {
+    log::info!(
+        "Creating table: {}.{} on connection: {}",
+        request.schema,
+        request.table_name,
+        connection_id
+    );
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    validate_identifier(&request.schema, "schema")?;
+    validate_identifier(&request.table_name, "table")?;
+
+    if request.columns.is_empty() {
+        return Err(RowFlowError::SchemaError("Cannot create a table without columns".to_string()));
+    }
+
+    let mut seen_columns = HashSet::new();
+    let primary_key_columns: Vec<String> = request
+        .columns
+        .iter()
+        .filter(|col| col.is_primary_key)
+        .map(|col| col.name.clone())
+        .collect();
+
+    let inline_primary_key = primary_key_columns.len() <= 1;
+
+    let mut column_definitions = Vec::with_capacity(request.columns.len());
+    for column in &request.columns {
+        let lowered = column.name.to_lowercase();
+        if !seen_columns.insert(lowered) {
+            return Err(RowFlowError::SchemaError(format!(
+                "Duplicate column name '{}' in create table request",
+                column.name
+            )));
+        }
+
+        column_definitions.push(build_column_definition(column, inline_primary_key)?);
+    }
+
+    if !primary_key_columns.is_empty() && !inline_primary_key {
+        let pk_clause = format!(
+            "PRIMARY KEY ({})",
+            primary_key_columns
+                .iter()
+                .map(|name| quote_identifier(name))
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        column_definitions.push(pk_clause);
+    }
+
+    let if_not_exists = if request.if_not_exists { "IF NOT EXISTS " } else { "" };
+    let sql = format!(
+        "CREATE TABLE {}{}.{} (\n    {}\n);",
+        if_not_exists,
+        quote_identifier(&request.schema),
+        quote_identifier(&request.table_name),
+        column_definitions.join(",\n    ")
+    );
+
+    client.batch_execute(&sql).await?;
+
+    Ok(())
+}
+
+/// Drop an existing table with optional cascade
+#[tauri::command]
+pub async fn drop_table(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: DropTableRequest,
+) -> Result<()> {
+    log::info!(
+        "Dropping table: {}.{} on connection: {}",
+        request.schema,
+        request.table_name,
+        connection_id
+    );
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    validate_identifier(&request.schema, "schema")?;
+    validate_identifier(&request.table_name, "table")?;
+
+    let if_exists = if request.if_exists { "IF EXISTS " } else { "" };
+    let cascade = if request.cascade { " CASCADE" } else { "" };
+    let sql = format!(
+        "DROP TABLE {}{}.{}{};",
+        if_exists,
+        quote_identifier(&request.schema),
+        quote_identifier(&request.table_name),
+        cascade
+    );
+
+    client.batch_execute(&sql).await?;
+
+    Ok(())
+}
+
+/// Add a new column to an existing table
+#[tauri::command]
+pub async fn add_table_column(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: AddTableColumnRequest,
+) -> Result<()> {
+    log::info!(
+        "Adding column '{}' to table {}.{} on connection: {}",
+        request.column.name,
+        request.schema,
+        request.table_name,
+        connection_id
+    );
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    validate_identifier(&request.schema, "schema")?;
+    validate_identifier(&request.table_name, "table")?;
+
+    if request.column.is_primary_key {
+        return Err(RowFlowError::SchemaError(
+            "Adding primary key columns via this operation is not supported".to_string(),
+        ));
+    }
+
+    let column_definition = build_column_definition(&request.column, true)?;
+    let if_not_exists = if request.if_not_exists { "IF NOT EXISTS " } else { "" };
+    let sql = format!(
+        "ALTER TABLE {} ADD COLUMN {}{};",
+        qualified_table_name(&request.schema, &request.table_name)?,
+        if_not_exists,
+        column_definition
+    );
+
+    client.batch_execute(&sql).await?;
+
+    Ok(())
+}
+
+/// Drop a column from an existing table
+#[tauri::command]
+pub async fn drop_table_column(
+    state: State<'_, AppState>,
+    connection_id: String,
+    request: DropTableColumnRequest,
+) -> Result<()> {
+    log::info!(
+        "Dropping column '{}' from table {}.{} on connection: {}",
+        request.column_name,
+        request.schema,
+        request.table_name,
+        connection_id
+    );
+
+    let pool = state.get_connection(&connection_id).await?;
+    let client = pool.get().await?;
+
+    validate_identifier(&request.schema, "schema")?;
+    validate_identifier(&request.table_name, "table")?;
+    validate_identifier(&request.column_name, "column")?;
+
+    let if_exists = if request.if_exists { "IF EXISTS " } else { "" };
+    let cascade = if request.cascade { " CASCADE" } else { "" };
+    let sql = format!(
+        "ALTER TABLE {} DROP COLUMN {}{}{};",
+        qualified_table_name(&request.schema, &request.table_name)?,
+        if_exists,
+        quote_identifier(&request.column_name),
+        cascade
+    );
+
+    client.batch_execute(&sql).await?;
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn base_column() -> TableColumnDefinition {
+        TableColumnDefinition {
+            name: "customer_id".to_string(),
+            data_type: "INTEGER".to_string(),
+            is_nullable: false,
+            default_expression: None,
+            is_primary_key: false,
+            references: None,
+        }
+    }
+
+    #[test]
+    fn builds_column_without_reference() {
+        let column = base_column();
+        let definition = build_column_definition(&column, true).expect("column definition");
+        assert_eq!(definition, "\"customer_id\" INTEGER NOT NULL");
+    }
+
+    #[test]
+    fn builds_column_with_reference_same_schema() {
+        let mut column = base_column();
+        column.references = Some(ColumnReference {
+            schema: None,
+            table: "accounts".to_string(),
+            column: "id".to_string(),
+            on_delete: Some("CASCADE".to_string()),
+            on_update: None,
+        });
+
+        let definition = build_column_definition(&column, true).expect("column definition");
+        assert_eq!(
+            definition,
+            "\"customer_id\" INTEGER NOT NULL REFERENCES \"accounts\"(\"id\") ON DELETE CASCADE"
+        );
+    }
+
+    #[test]
+    fn builds_column_with_reference_different_schema_and_actions() {
+        let mut column = base_column();
+        column.references = Some(ColumnReference {
+            schema: Some("billing".to_string()),
+            table: "accounts".to_string(),
+            column: "id".to_string(),
+            on_delete: Some("SET NULL".to_string()),
+            on_update: Some("RESTRICT".to_string()),
+        });
+
+        let definition = build_column_definition(&column, true).expect("column definition");
+        assert_eq!(
+            definition,
+            "\"customer_id\" INTEGER NOT NULL REFERENCES \"billing\".\"accounts\"(\"id\") ON DELETE SET NULL ON UPDATE RESTRICT"
+        );
+    }
 }

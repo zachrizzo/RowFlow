@@ -41,6 +41,7 @@ export interface NodeMetadata {
   isUnique?: boolean;
   isForeignKey?: boolean;
   foreignKeyTable?: string;
+  foreignKeySchema?: string;
   foreignKeyColumn?: string;
   characterMaximumLength?: number;
   numericPrecision?: number;
@@ -132,6 +133,7 @@ export function columnToNode(column: Column, schema: string, table: string): Sch
       isUnique: column.isUnique,
       isForeignKey: column.isForeignKey,
       foreignKeyTable: column.foreignKeyTable,
+      foreignKeySchema: column.foreignKeySchema,
       foreignKeyColumn: column.foreignKeyColumn,
       characterMaximumLength: column.characterMaximumLength,
       numericPrecision: column.numericPrecision,

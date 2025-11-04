@@ -510,7 +510,7 @@ export function QueryPanel({
         });
         updateTabExecution(activeTabId, {
           status: 'error',
-          error,
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     },
@@ -1021,8 +1021,14 @@ export function QueryPanel({
     if (!currentPrimaryKeys.length) return 'Unable to determine primary key columns for this table.';
     return null;
   })();
-  const sortKey = getTableSortKey(activeContext ?? lastContextRef.current);
+  const sortContext = activeContext?.type === 'table'
+    ? activeContext
+    : lastContextRef.current && lastContextRef.current.type === 'table'
+      ? lastContextRef.current
+      : undefined;
+  const sortKey = getTableSortKey(sortContext);
   const activeSortState = sortKey ? tableSortStates[sortKey] : undefined;
+  const sortingEnabled = Boolean(sortContext);
 
   return (
     <div className="flex h-full flex-col bg-card">
@@ -1224,9 +1230,9 @@ export function QueryPanel({
                   schema={activeContext?.type === 'table' ? activeContext.schema : null}
                   table={activeContext?.type === 'table' ? activeContext.table : null}
                   primaryKeys={currentPrimaryKeys}
-                  sortColumn={activeSortState?.column ?? null}
-                  sortDirection={activeSortState?.direction ?? null}
-                  onSortChange={handleSortChange}
+                  sortColumn={sortingEnabled ? activeSortState?.column ?? null : null}
+                  sortDirection={sortingEnabled ? activeSortState?.direction ?? null : null}
+                  onSortChange={sortingEnabled ? handleSortChange : undefined}
                 />
               </div>
             </>
@@ -1375,6 +1381,9 @@ export function QueryPanel({
                   schema={activeContext?.type === 'table' ? activeContext.schema : null}
                   table={activeContext?.type === 'table' ? activeContext.table : null}
                   primaryKeys={currentPrimaryKeys}
+                  sortColumn={sortingEnabled ? activeSortState?.column ?? null : null}
+                  sortDirection={sortingEnabled ? activeSortState?.direction ?? null : null}
+                  onSortChange={sortingEnabled ? handleSortChange : undefined}
                 />
               </div>
             ) : execution.status === 'idle' && !execution.error ? (

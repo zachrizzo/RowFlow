@@ -13,6 +13,11 @@ import {
   Info,
   Eye,
   Clipboard,
+  PlusSquare,
+  PlusCircle,
+  Columns3,
+  Trash2,
+  MinusCircle,
 } from 'lucide-react';
 import type { SchemaNode } from '@/types/schema';
 import { useToast } from '@/hooks/use-toast';
@@ -22,6 +27,14 @@ interface SchemaNodeContextMenuProps {
   children: ReactNode;
   onSampleTable?: (schema: string, table: string) => void;
   onViewInfo?: (node: SchemaNode) => void;
+  onCreateTable?: (schema: string) => void;
+  onDropTable?: (schema: string, table: string) => void;
+  onAddColumn?: (schema: string, table: string) => void;
+  onDropColumn?: (schema: string, table: string, column: string) => void;
+  onInsertRow?: (schema: string, table: string) => void;
+  onDeleteRows?: (schema: string, table: string) => void;
+  onDropSchema?: (schema: string) => void;
+  onRenameSchema?: (schema: string) => void;
 }
 
 export function SchemaNodeContextMenu({
@@ -29,6 +42,14 @@ export function SchemaNodeContextMenu({
   children,
   onSampleTable,
   onViewInfo,
+  onCreateTable,
+  onDropTable,
+  onAddColumn,
+  onDropColumn,
+  onInsertRow,
+  onDeleteRows,
+  onDropSchema,
+  onRenameSchema,
 }: SchemaNodeContextMenuProps) {
   const { toast } = useToast();
 
@@ -85,6 +106,54 @@ export function SchemaNodeContextMenu({
     }
   };
 
+  const handleCreateTable = () => {
+    if (node.schema && onCreateTable) {
+      onCreateTable(node.schema);
+    }
+  };
+
+  const handleDropTable = () => {
+    if (node.schema && node.table && onDropTable) {
+      onDropTable(node.schema, node.table);
+    }
+  };
+
+  const handleAddColumn = () => {
+    if (node.schema && node.table && onAddColumn) {
+      onAddColumn(node.schema, node.table);
+    }
+  };
+
+  const handleDropColumn = () => {
+    if (node.schema && node.table && onDropColumn) {
+      onDropColumn(node.schema, node.table, node.name);
+    }
+  };
+
+  const handleInsertRow = () => {
+    if (node.schema && node.table && onInsertRow) {
+      onInsertRow(node.schema, node.table);
+    }
+  };
+
+  const handleDeleteRows = () => {
+    if (node.schema && node.table && onDeleteRows) {
+      onDeleteRows(node.schema, node.table);
+    }
+  };
+
+  const handleDropSchema = () => {
+    if (node.schema && onDropSchema) {
+      onDropSchema(node.schema);
+    }
+  };
+
+  const handleRenameSchema = () => {
+    if (node.schema && onRenameSchema) {
+      onRenameSchema(node.schema);
+    }
+  };
+
   // Determine which menu items to show based on node type
   const showTableActions = node.type === 'table' || node.type === 'view';
   const showColumnActions = node.type === 'column';
@@ -129,9 +198,33 @@ export function SchemaNodeContextMenu({
 
             <ContextMenuSeparator />
 
+            <ContextMenuItem onClick={handleInsertRow}>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Insert Row
+            </ContextMenuItem>
+
+            <ContextMenuItem onClick={handleDeleteRows}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete Rows
+            </ContextMenuItem>
+
+            <ContextMenuItem onClick={handleAddColumn}>
+              <Columns3 className="mr-2 h-4 w-4" />
+              Add Column
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
             <ContextMenuItem onClick={handleViewInfo}>
               <Info className="mr-2 h-4 w-4" />
               View Table Info
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
+            <ContextMenuItem onClick={handleDropTable}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Drop Table
             </ContextMenuItem>
           </>
         )}
@@ -153,6 +246,10 @@ export function SchemaNodeContextMenu({
                 FK → {node.metadata.foreignKeyTable}
               </ContextMenuItem>
             )}
+            <ContextMenuItem onClick={handleDropColumn}>
+              <MinusCircle className="mr-2 h-4 w-4" />
+              Drop Column
+            </ContextMenuItem>
           </>
         )}
 
@@ -163,6 +260,19 @@ export function SchemaNodeContextMenu({
             <ContextMenuItem onClick={handleViewInfo}>
               <Info className="mr-2 h-4 w-4" />
               Schema Info
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleCreateTable}>
+              <PlusSquare className="mr-2 h-4 w-4" />
+              Create Table
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={handleRenameSchema}>
+              <FileCode className="mr-2 h-4 w-4" />
+              Rename Schema
+            </ContextMenuItem>
+            <ContextMenuItem onClick={handleDropSchema}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Drop Schema
             </ContextMenuItem>
           </>
         )}
