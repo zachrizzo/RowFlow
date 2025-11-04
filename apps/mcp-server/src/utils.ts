@@ -5,10 +5,60 @@
 import { MCPError, Profiles } from './types.js';
 
 /**
+ * Removes SQL string literals and quoted identifiers to make keyword detection safer.
+ */
+function stripQuotedSections(sql: string): string {
+  let result = '';
+  let i = 0;
+  let inSingle = false;
+  let inDouble = false;
+  while (i < sql.length) {
+    const ch = sql[i];
+    if (inSingle) {
+      if (ch === '\'' && sql[i + 1] === '\'') {
+        i += 2;
+        continue;
+      }
+      if (ch === '\'') {
+        inSingle = false;
+      }
+      i += 1;
+      continue;
+    }
+    if (inDouble) {
+      if (ch === '"' && sql[i + 1] === '"') {
+        i += 2;
+        continue;
+      }
+      if (ch === '"') {
+        inDouble = false;
+      }
+      i += 1;
+      continue;
+    }
+    if (ch === '\'') {
+      inSingle = true;
+      result += ' ';
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inDouble = true;
+      result += ' ';
+      i += 1;
+      continue;
+    }
+    result += ch;
+    i += 1;
+  }
+  return result;
+}
+
+/**
  * Validates that SQL is a SELECT statement only
  */
 export function validateSelectQuery(sql: string): void {
-  const trimmedSql = sql.trim().toLowerCase();
+  const trimmedSql = sql.trim();
 
   // Remove comments
   const withoutComments = trimmedSql
@@ -16,12 +66,16 @@ export function validateSelectQuery(sql: string): void {
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .trim();
 
+  const lowered = withoutComments.toLowerCase();
+
   // Check if it starts with SELECT or WITH (for CTEs)
-  if (!withoutComments.startsWith('select') && !withoutComments.startsWith('with')) {
+  if (!lowered.startsWith('select') && !lowered.startsWith('with')) {
     throw new Error('Only SELECT queries are allowed. DML/DDL operations are not permitted.');
   }
 
-  // Check for dangerous keywords that might be hidden
+  // Strip quoted strings/identifiers before scanning for dangerous keywords
+  const searchable = stripQuotedSections(lowered);
+
   const dangerousKeywords = [
     'insert', 'update', 'delete', 'drop', 'create', 'alter',
     'truncate', 'grant', 'revoke', 'execute', 'exec'
@@ -29,10 +83,33 @@ export function validateSelectQuery(sql: string): void {
 
   for (const keyword of dangerousKeywords) {
     const regex = new RegExp(`\\b${keyword}\\b`, 'i');
-    if (regex.test(withoutComments)) {
+    if (regex.test(searchable)) {
       throw new Error(`Query contains prohibited keyword: ${keyword.toUpperCase()}`);
     }
   }
+}
+
+/**
+ * Normalize raw environment variable value by trimming quotes and simple escapes.
+ */
+function normalizeEnvValue(value: string | undefined): string | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  let trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith('\'') && trimmed.endsWith('\''))
+  ) {
+    trimmed = trimmed.slice(1, -1);
+  }
+  return trimmed
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\'/g, '\'')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
 }
 
 /**
@@ -106,16 +183,19 @@ export function parseProfilesFromEnv(): Profiles {
   // Build profile configs
   for (const name of profileNames) {
     const prefix = `PG_PROFILE_${name}_`;
-    const host = process.env[`${prefix}HOST`];
-    const port = process.env[`${prefix}PORT`];
-    const database = process.env[`${prefix}DATABASE`];
-    const user = process.env[`${prefix}USER`];
-    const password = process.env[`${prefix}PASSWORD`];
+    const host = normalizeEnvValue(process.env[`${prefix}HOST`]);
+    const port = normalizeEnvValue(process.env[`${prefix}PORT`]);
+    const database = normalizeEnvValue(process.env[`${prefix}DATABASE`]);
+    const user = normalizeEnvValue(process.env[`${prefix}USER`]);
+    const password = normalizeEnvValue(process.env[`${prefix}PASSWORD`]);
 
     if (!host || !port || !database || !user || !password) {
       console.error(`[MCP] Incomplete profile configuration for: ${name}`);
       continue;
     }
+
+    const ssl = normalizeEnvValue(process.env[`${prefix}SSL`]) === 'true';
+    const maxConnections = normalizeEnvValue(process.env[`${prefix}MAX_CONNECTIONS`]);
 
     profiles[name.toLowerCase()] = {
       host,
@@ -123,10 +203,8 @@ export function parseProfilesFromEnv(): Profiles {
       database,
       user,
       password,
-      ssl: process.env[`${prefix}SSL`] === 'true',
-      max: process.env[`${prefix}MAX_CONNECTIONS`]
-        ? parseInt(process.env[`${prefix}MAX_CONNECTIONS`] as string, 10)
-        : 10,
+      ssl,
+      max: maxConnections ? parseInt(maxConnections, 10) : 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000
     };

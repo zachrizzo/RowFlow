@@ -6,9 +6,12 @@ use crate::types::{
     ForeignKeySearchResult, InsertRowRequest, QueryResult,
 };
 use serde_json::Value;
+use std::convert::TryFrom;
+use std::str::FromStr;
 use std::time::Instant;
 use tauri::State;
-use tokio_postgres::types::Type;
+use tokio_postgres::types::{Json, ToSql, Type};
+use uuid::Uuid;
 
 /// Connect to a PostgreSQL database
 #[tauri::command]
@@ -37,8 +40,7 @@ pub async fn test_connection(profile: ConnectionProfile) -> Result<ConnectionInf
     let connection_id = temp_state.create_connection(profile.clone()).await?;
 
     // Get connection info
-    let pool = temp_state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = temp_state.get_client(&connection_id).await?;
 
     // Query server information
     let version_row = client.query_one("SELECT version() as version", &[]).await?;
@@ -69,6 +71,8 @@ pub async fn test_connection(profile: ConnectionProfile) -> Result<ConnectionInf
         current_schema: info_row.get(6),
     };
 
+    drop(client);
+
     // Clean up temporary connection
     temp_state.remove_connection(&connection_id).await?;
 
@@ -81,18 +85,20 @@ pub async fn execute_query(
     state: State<'_, AppState>,
     connection_id: String,
     sql: String,
-    _params: Vec<Value>,
+    params: Vec<Value>,
 ) -> Result<QueryResult> {
     log::info!("Executing query on connection: {}", connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let start = Instant::now();
 
     // Execute the query
     let statement = client.prepare(&sql).await?;
-    let rows = client.query(&statement, &[]).await?;
+    let converted_params = convert_params(&params, statement.params())?;
+    let param_refs: Vec<&(dyn ToSql + Sync)> =
+        converted_params.iter().map(ConvertedParam::as_sql).collect();
+    let rows = client.query(&statement, &param_refs).await?;
 
     let execution_time = start.elapsed().as_secs_f64() * 1000.0;
 
@@ -135,8 +141,7 @@ pub async fn execute_update(
 ) -> Result<u64> {
     log::info!("Executing update on connection: {}", connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let sanitized_sql = sanitize_sql_for_wrapping(&sql);
 
@@ -167,8 +172,7 @@ pub async fn execute_query_stream(
         chunk_size
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     // Wrap the query with LIMIT and OFFSET
     let paginated_sql = format!(
@@ -290,8 +294,7 @@ pub async fn cancel_query(
 ) -> Result<()> {
     log::info!("Cancelling query with PID {} on connection: {}", backend_pid, connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     // Use pg_cancel_backend to cancel the query
     let query = "SELECT pg_cancel_backend($1)";
@@ -303,8 +306,7 @@ pub async fn cancel_query(
 /// Get the current backend process ID
 #[tauri::command]
 pub async fn get_backend_pid(state: State<'_, AppState>, connection_id: String) -> Result<i32> {
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let row = client.query_one("SELECT pg_backend_pid()", &[]).await?;
     let pid: i32 = row.get(0);
@@ -343,15 +345,10 @@ pub async fn insert_table_row(
         values.push(value_to_sql_literal(value));
     }
 
-    let sql = format!(
-        "INSERT INTO {} ({}) VALUES ({});",
-        table,
-        columns.join(", "),
-        values.join(", ")
-    );
+    let sql =
+        format!("INSERT INTO {} ({}) VALUES ({});", table, columns.join(", "), values.join(", "));
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let affected = client.execute(sql.as_str(), &[]).await?;
     Ok(affected)
@@ -366,15 +363,17 @@ pub async fn search_foreign_key_targets(
 ) -> Result<Vec<ForeignKeySearchResult>> {
     log::info!(
         "Searching foreign key targets for {}.{} ({}) on connection: {}",
-        request.schema, request.table, request.column, connection_id
+        request.schema,
+        request.table,
+        request.column,
+        connection_id
     );
 
     validate_identifier(&request.schema, "schema")?;
     validate_identifier(&request.table, "table")?;
     validate_identifier(&request.column, "column")?;
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let qualified_table = qualified_table_name(&request.schema, &request.table)?;
     let column_ident = quote_identifier(&request.column);
@@ -386,10 +385,7 @@ pub async fn search_foreign_key_targets(
         .filter(|term| !term.is_empty())
         .map(|term| format!("%{term}%"));
 
-    let limit = request
-        .limit
-        .unwrap_or(20)
-        .clamp(1, 200);
+    let limit = request.limit.unwrap_or(20).clamp(1, 200);
 
     let sql = format!(
         "SELECT ({column})::text AS key, row_to_json(t) AS row \
@@ -401,19 +397,11 @@ pub async fn search_foreign_key_targets(
         table = qualified_table
     );
 
-    let rows = client
-        .query(
-            &sql,
-            &[&pattern, &limit],
-        )
-        .await?;
+    let rows = client.query(&sql, &[&pattern, &limit]).await?;
 
     let results = rows
         .into_iter()
-        .map(|row| ForeignKeySearchResult {
-            key: row.get(0),
-            row: row.get(1),
-        })
+        .map(|row| ForeignKeySearchResult { key: row.get(0), row: row.get(1) })
         .collect();
 
     Ok(results)
@@ -455,15 +443,9 @@ pub async fn delete_table_rows(
 
     let limit_clause = request.limit.map(|limit| format!(" LIMIT {}", limit)).unwrap_or_default();
 
-    let sql = format!(
-        "DELETE FROM {} WHERE {}{};",
-        table,
-        predicates.join(" AND "),
-        limit_clause
-    );
+    let sql = format!("DELETE FROM {} WHERE {}{};", table, predicates.join(" AND "), limit_clause);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let affected = client.execute(sql.as_str(), &[]).await?;
     Ok(affected)
@@ -510,6 +492,12 @@ fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type: &Type) -> 
             .and_then(serde_json::Number::from_f64)
             .map(Value::Number)
             .unwrap_or(Value::Null),
+        &Type::UUID => row
+            .try_get::<_, Option<Uuid>>(idx)
+            .ok()
+            .flatten()
+            .map(|v| Value::String(v.to_string()))
+            .unwrap_or(Value::Null),
         &Type::TEXT | &Type::VARCHAR | &Type::BPCHAR | &Type::NAME => row
             .try_get::<_, Option<String>>(idx)
             .ok()
@@ -519,17 +507,35 @@ fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type: &Type) -> 
         &Type::JSON | &Type::JSONB => {
             row.try_get::<_, Option<Value>>(idx).ok().flatten().unwrap_or(Value::Null)
         }
-        &Type::TIMESTAMP | &Type::TIMESTAMPTZ => row
+        &Type::TIMESTAMP => row
             .try_get::<_, Option<chrono::NaiveDateTime>>(idx)
             .ok()
             .flatten()
             .map(|v| Value::String(v.to_string()))
+            .unwrap_or(Value::Null),
+        &Type::TIMESTAMPTZ => row
+            .try_get::<_, Option<chrono::DateTime<chrono::Utc>>>(idx)
+            .ok()
+            .flatten()
+            .map(|v| Value::String(v.to_rfc3339()))
             .unwrap_or(Value::Null),
         &Type::DATE => row
             .try_get::<_, Option<chrono::NaiveDate>>(idx)
             .ok()
             .flatten()
             .map(|v| Value::String(v.to_string()))
+            .unwrap_or(Value::Null),
+        &Type::TIME => row
+            .try_get::<_, Option<chrono::NaiveTime>>(idx)
+            .ok()
+            .flatten()
+            .map(|v| Value::String(v.format("%H:%M:%S%.f").to_string()))
+            .unwrap_or(Value::Null),
+        &Type::TIMETZ => row
+            .try_get::<_, Option<chrono::DateTime<chrono::FixedOffset>>>(idx)
+            .ok()
+            .flatten()
+            .map(|v| Value::String(v.format("%H:%M:%S%.f%:z").to_string()))
             .unwrap_or(Value::Null),
         _ => row
             .try_get::<_, Option<String>>(idx)
@@ -538,6 +544,280 @@ fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type: &Type) -> 
             .map(Value::String)
             .unwrap_or(Value::Null),
     }
+}
+
+fn convert_params(params: &[Value], expected_types: &[Type]) -> Result<Vec<ConvertedParam>> {
+    if params.len() != expected_types.len() {
+        return Err(RowFlowError::QueryError(format!(
+            "Expected {} parameter(s) but received {}",
+            expected_types.len(),
+            params.len()
+        )));
+    }
+
+    let mut converted = Vec::with_capacity(params.len());
+    for (idx, (value, ty)) in params.iter().zip(expected_types.iter()).enumerate() {
+        converted.push(convert_param(idx, value, ty)?);
+    }
+    Ok(converted)
+}
+
+fn convert_param(index: usize, value: &Value, ty: &Type) -> Result<ConvertedParam> {
+    if value.is_null() {
+        return Ok(convert_null_param(ty));
+    }
+
+    match *ty {
+        Type::BOOL => match value {
+            Value::Bool(b) => Ok(ConvertedParam::Bool(Some(*b))),
+            Value::String(s) => match s.to_lowercase().as_str() {
+                "true" | "t" | "1" => Ok(ConvertedParam::Bool(Some(true))),
+                "false" | "f" | "0" => Ok(ConvertedParam::Bool(Some(false))),
+                _ => Err(param_type_error(index, "BOOLEAN", value)),
+            },
+            _ => Err(param_type_error(index, "BOOLEAN", value)),
+        },
+        Type::INT2 => match value_to_i64(value) {
+            Some(v) => i16::try_from(v)
+                .map(|cast| ConvertedParam::I16(Some(cast)))
+                .map_err(|_| param_type_error(index, "SMALLINT", value)),
+            None => Err(param_type_error(index, "SMALLINT", value)),
+        },
+        Type::INT4 => match value_to_i64(value) {
+            Some(v) => i32::try_from(v)
+                .map(|cast| ConvertedParam::I32(Some(cast)))
+                .map_err(|_| param_type_error(index, "INTEGER", value)),
+            None => Err(param_type_error(index, "INTEGER", value)),
+        },
+        Type::INT8 => match value_to_i64(value) {
+            Some(v) => Ok(ConvertedParam::I64(Some(v))),
+            None => Err(param_type_error(index, "BIGINT", value)),
+        },
+        Type::FLOAT4 => match value_to_f64(value) {
+            Some(v) => Ok(ConvertedParam::F32(Some(v as f32))),
+            None => Err(param_type_error(index, "REAL", value)),
+        },
+        Type::FLOAT8 | Type::NUMERIC => match value_to_f64(value) {
+            Some(v) => Ok(ConvertedParam::F64(Some(v))),
+            None => Err(param_type_error(index, "DOUBLE PRECISION", value)),
+        },
+        Type::JSON | Type::JSONB => Ok(ConvertedParam::Json(Some(Json(value.clone())))),
+        Type::TIMESTAMP => match value {
+            Value::String(s) => parse_naive_datetime(s)
+                .map(|ts| ConvertedParam::Timestamp(Some(ts)))
+                .ok_or_else(|| param_type_error(index, "TIMESTAMP", value)),
+            _ => Err(param_type_error(index, "TIMESTAMP", value)),
+        },
+        Type::TIMESTAMPTZ => match value {
+            Value::String(s) => parse_datetime_with_tz(s)
+                .map(|ts| ConvertedParam::Timestamptz(Some(ts)))
+                .ok_or_else(|| param_type_error(index, "TIMESTAMP WITH TIME ZONE", value)),
+            _ => Err(param_type_error(index, "TIMESTAMP WITH TIME ZONE", value)),
+        },
+        Type::DATE => match value {
+            Value::String(s) => {
+                if let Ok(date) = chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d") {
+                    Ok(ConvertedParam::Date(Some(date)))
+                } else if let Some(dt) = parse_datetime_with_tz(s) {
+                    Ok(ConvertedParam::Date(Some(dt.date_naive())))
+                } else if let Some(dt) = parse_naive_datetime(s) {
+                    Ok(ConvertedParam::Date(Some(dt.date())))
+                } else {
+                    Err(param_type_error(index, "DATE", value))
+                }
+            }
+            _ => Err(param_type_error(index, "DATE", value)),
+        },
+        Type::TIME => match value {
+            Value::String(s) => parse_naive_time(s)
+                .map(|t| ConvertedParam::Time(Some(t)))
+                .ok_or_else(|| param_type_error(index, "TIME", value)),
+            _ => Err(param_type_error(index, "TIME", value)),
+        },
+        Type::TIMETZ => match value {
+            Value::String(s) => parse_time_with_tz(s)
+                .map(|t| ConvertedParam::TimeTz(Some(t)))
+                .ok_or_else(|| param_type_error(index, "TIME WITH TIME ZONE", value)),
+            _ => Err(param_type_error(index, "TIME WITH TIME ZONE", value)),
+        },
+        Type::UUID => match value {
+            Value::String(s) => Uuid::from_str(s)
+                .map(|uuid| ConvertedParam::Uuid(Some(uuid)))
+                .map_err(|_| param_type_error(index, "UUID", value)),
+            _ => Err(param_type_error(index, "UUID", value)),
+        },
+        Type::TEXT | Type::VARCHAR | Type::BPCHAR | Type::NAME | Type::UNKNOWN => {
+            Ok(ConvertedParam::String(Some(value_to_string(value))))
+        }
+        _ => Ok(ConvertedParam::String(Some(value_to_string(value)))),
+    }
+}
+
+fn convert_null_param(ty: &Type) -> ConvertedParam {
+    match *ty {
+        Type::BOOL => ConvertedParam::Bool(None),
+        Type::INT2 => ConvertedParam::I16(None),
+        Type::INT4 => ConvertedParam::I32(None),
+        Type::INT8 => ConvertedParam::I64(None),
+        Type::FLOAT4 => ConvertedParam::F32(None),
+        Type::FLOAT8 | Type::NUMERIC => ConvertedParam::F64(None),
+        Type::JSON | Type::JSONB => ConvertedParam::Json(None),
+        Type::TIMESTAMP => ConvertedParam::Timestamp(None),
+        Type::TIMESTAMPTZ => ConvertedParam::Timestamptz(None),
+        Type::DATE => ConvertedParam::Date(None),
+        Type::TIME => ConvertedParam::Time(None),
+        Type::TIMETZ => ConvertedParam::TimeTz(None),
+        Type::UUID => ConvertedParam::Uuid(None),
+        _ => ConvertedParam::String(None),
+    }
+}
+
+enum ConvertedParam {
+    Bool(Option<bool>),
+    I16(Option<i16>),
+    I32(Option<i32>),
+    I64(Option<i64>),
+    F32(Option<f32>),
+    F64(Option<f64>),
+    String(Option<String>),
+    Json(Option<Json<Value>>),
+    Timestamp(Option<chrono::NaiveDateTime>),
+    Timestamptz(Option<chrono::DateTime<chrono::Utc>>),
+    Date(Option<chrono::NaiveDate>),
+    Time(Option<chrono::NaiveTime>),
+    TimeTz(Option<chrono::DateTime<chrono::FixedOffset>>),
+    Uuid(Option<Uuid>),
+}
+
+impl ConvertedParam {
+    fn as_sql(&self) -> &(dyn ToSql + Sync) {
+        match self {
+            ConvertedParam::Bool(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::I16(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::I32(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::I64(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::F32(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::F64(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::String(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::Json(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::Timestamp(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::Timestamptz(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::Date(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::Time(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::TimeTz(v) => v as &(dyn ToSql + Sync),
+            ConvertedParam::Uuid(v) => v as &(dyn ToSql + Sync),
+        }
+    }
+}
+
+fn param_type_error(index: usize, expected: &str, actual: &Value) -> RowFlowError {
+    RowFlowError::QueryError(format!(
+        "Parameter ${} expected {} but received {:?}",
+        index + 1,
+        expected,
+        actual
+    ))
+}
+
+fn value_to_i64(value: &Value) -> Option<i64> {
+    match value {
+        Value::Number(num) => {
+            num.as_i64().or_else(|| num.as_u64().and_then(|u| i64::try_from(u).ok()))
+        }
+        Value::String(s) => s.parse::<i64>().ok(),
+        Value::Bool(b) => Some(if *b { 1 } else { 0 }),
+        _ => None,
+    }
+}
+
+fn value_to_f64(value: &Value) -> Option<f64> {
+    match value {
+        Value::Number(num) => num.as_f64(),
+        Value::String(s) => s.parse::<f64>().ok(),
+        Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
+        _ => None,
+    }
+}
+
+fn value_to_string(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        Value::Number(num) => num.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Array(_) | Value::Object(_) => value.to_string(),
+        Value::Null => String::new(),
+    }
+}
+
+fn parse_naive_datetime(input: &str) -> Option<chrono::NaiveDateTime> {
+    chrono::NaiveDateTime::parse_from_str(input, "%Y-%m-%d %H:%M:%S%.f")
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(input, "%Y-%m-%d %H:%M:%S"))
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(input, "%Y-%m-%dT%H:%M:%S%.f"))
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(input, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| chrono::DateTime::parse_from_rfc3339(input).map(|dt| dt.naive_utc()))
+        .ok()
+}
+
+fn parse_datetime_with_tz(input: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::parse_from_rfc3339(input).map(|dt| dt.with_timezone(&chrono::Utc)).ok()
+}
+
+fn parse_naive_time(input: &str) -> Option<chrono::NaiveTime> {
+    chrono::NaiveTime::parse_from_str(input, "%H:%M:%S%.f")
+        .or_else(|_| chrono::NaiveTime::parse_from_str(input, "%H:%M:%S"))
+        .ok()
+}
+
+fn parse_time_with_tz(input: &str) -> Option<chrono::DateTime<chrono::FixedOffset>> {
+    chrono::DateTime::parse_from_rfc3339(input)
+        .or_else(|_| {
+            chrono::DateTime::parse_from_str(
+                &format!("1970-01-01T{input}"),
+                "%Y-%m-%dT%H:%M:%S%.f%:z",
+            )
+        })
+        .ok()
+}
+
+fn normalize_env_file_value(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let without_quotes = if trimmed.len() >= 2
+        && ((trimmed.starts_with('"') && trimmed.ends_with('"'))
+            || (trimmed.starts_with('\'') && trimmed.ends_with('\'')))
+    {
+        &trimmed[1..trimmed.len() - 1]
+    } else {
+        trimmed
+    };
+    unescape_env_value(without_quotes)
+}
+
+fn unescape_env_value(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let mut chars = input.chars();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            if let Some(next) = chars.next() {
+                match next {
+                    'n' => output.push('\n'),
+                    'r' => output.push('\r'),
+                    't' => output.push('\t'),
+                    '\\' => output.push('\\'),
+                    '"' => output.push('"'),
+                    '\'' => output.push('\''),
+                    _ => {
+                        output.push('\\');
+                        output.push(next);
+                    }
+                }
+            } else {
+                output.push('\\');
+            }
+        } else {
+            output.push(ch);
+        }
+    }
+    output
 }
 
 /// List connection profiles from MCP server .env file
@@ -592,7 +872,7 @@ pub async fn list_mcp_profiles() -> Result<Vec<ConnectionProfile>> {
                         profile_data
                             .entry(profile_name.to_string())
                             .or_insert_with(HashMap::new)
-                            .insert(field.to_string(), value.to_string());
+                            .insert(field.to_string(), normalize_env_file_value(value));
                         break;
                     }
                 }
@@ -611,13 +891,15 @@ pub async fn list_mcp_profiles() -> Result<Vec<ConnectionProfile>> {
             data.get("USER"),
             data.get("PASSWORD"),
         ) {
-            let ssl_enabled = data.get("SSL").map(|s| s == "true").unwrap_or(false);
+            let ssl_enabled =
+                data.get("SSL").map(|s| s.eq_ignore_ascii_case("true")).unwrap_or(false);
+            let parsed_port = port.parse::<u16>().unwrap_or(5432);
 
             profiles.push(ConnectionProfile {
                 id: None,
                 name: name.to_lowercase(),
                 host: host.clone(),
-                port: port.parse().unwrap_or(5432),
+                port: parsed_port,
                 database: database.clone(),
                 username: user.clone(),
                 password: Some(password.clone()),

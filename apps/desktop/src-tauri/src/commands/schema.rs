@@ -123,8 +123,7 @@ pub async fn list_schemas(
 ) -> Result<Vec<Schema>> {
     log::info!("Listing schemas for connection: {}", connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let query = r#"
         SELECT
@@ -165,8 +164,7 @@ pub async fn list_tables(
 ) -> Result<Vec<Table>> {
     log::info!("Listing tables for connection: {}", connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let query = r#"
         SELECT
@@ -229,8 +227,7 @@ pub async fn get_table_columns(
 ) -> Result<Vec<Column>> {
     log::info!("Getting columns for table: {}.{} on connection: {}", schema, table, connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let query = r#"
         SELECT
@@ -363,8 +360,7 @@ pub async fn get_primary_keys(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let query = r#"
         SELECT kcu.column_name
@@ -395,8 +391,7 @@ pub async fn get_indexes(
 ) -> Result<Vec<Index>> {
     log::info!("Getting indexes for table: {}.{} on connection: {}", schema, table, connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let query = r#"
         SELECT
@@ -453,8 +448,7 @@ pub async fn get_table_stats(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let query = r#"
         SELECT
@@ -526,8 +520,7 @@ pub async fn get_foreign_keys(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let query = r#"
         SELECT
@@ -607,8 +600,7 @@ pub async fn get_constraints(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     let query = r#"
         SELECT
@@ -652,17 +644,12 @@ pub async fn create_schema(
 ) -> Result<()> {
     log::info!("Creating schema: {} on connection: {}", request.name, connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     validate_identifier(&request.name, "schema")?;
 
     let if_not_exists = if request.if_not_exists { "IF NOT EXISTS " } else { "" };
-    let sql = format!(
-        "CREATE SCHEMA {}{};",
-        if_not_exists,
-        quote_identifier(&request.name)
-    );
+    let sql = format!("CREATE SCHEMA {}{};", if_not_exists, quote_identifier(&request.name));
 
     client.batch_execute(&sql).await?;
 
@@ -678,19 +665,13 @@ pub async fn drop_schema(
 ) -> Result<()> {
     log::info!("Dropping schema: {} on connection: {}", request.name, connection_id);
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     validate_identifier(&request.name, "schema")?;
 
     let if_exists = if request.if_exists { "IF EXISTS " } else { "" };
     let cascade = if request.cascade { " CASCADE" } else { "" };
-    let sql = format!(
-        "DROP SCHEMA {}{}{};",
-        if_exists,
-        quote_identifier(&request.name),
-        cascade
-    );
+    let sql = format!("DROP SCHEMA {}{}{};", if_exists, quote_identifier(&request.name), cascade);
 
     client.batch_execute(&sql).await?;
 
@@ -711,8 +692,7 @@ pub async fn rename_schema(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     validate_identifier(&request.current_name, "schema")?;
     validate_identifier(&request.new_name, "schema")?;
@@ -742,8 +722,7 @@ pub async fn create_table(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     validate_identifier(&request.schema, "schema")?;
     validate_identifier(&request.table_name, "table")?;
@@ -815,8 +794,7 @@ pub async fn drop_table(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     validate_identifier(&request.schema, "schema")?;
     validate_identifier(&request.table_name, "table")?;
@@ -851,8 +829,7 @@ pub async fn add_table_column(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     validate_identifier(&request.schema, "schema")?;
     validate_identifier(&request.table_name, "table")?;
@@ -892,8 +869,7 @@ pub async fn drop_table_column(
         connection_id
     );
 
-    let pool = state.get_connection(&connection_id).await?;
-    let client = pool.get().await?;
+    let client = state.get_client(&connection_id).await?;
 
     validate_identifier(&request.schema, "schema")?;
     validate_identifier(&request.table_name, "table")?;

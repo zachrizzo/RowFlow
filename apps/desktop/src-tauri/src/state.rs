@@ -1,6 +1,6 @@
 use crate::error::{Result, RowFlowError};
 use crate::types::ConnectionProfile;
-use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
+use deadpool_postgres::{Manager, ManagerConfig, Object, Pool, RecyclingMethod};
 use postgres_native_tls::MakeTlsConnector;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -53,6 +53,21 @@ impl AppState {
             .get(connection_id)
             .map(|cp| cp.pool.clone())
             .ok_or_else(|| RowFlowError::ConnectionNotFound(connection_id.to_string()))
+    }
+
+    /// Acquire a client from the pool with session parameters applied
+    pub async fn get_client(&self, connection_id: &str) -> Result<Object> {
+        let (pool, profile) = {
+            let connections = self.connections.lock().await;
+            connections
+                .get(connection_id)
+                .map(|cp| (cp.pool.clone(), cp.profile.clone()))
+                .ok_or_else(|| RowFlowError::ConnectionNotFound(connection_id.to_string()))?
+        };
+
+        let client = pool.get().await?;
+        Self::set_session_parameters(&client, &profile).await?;
+        Ok(client)
     }
 
     /// Get connection profile

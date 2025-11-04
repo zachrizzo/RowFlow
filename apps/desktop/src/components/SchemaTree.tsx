@@ -149,7 +149,7 @@ function TreeNode({
       >
         <div
           className={cn(
-            'flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-accent rounded-sm transition-colors group',
+            'flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-accent rounded-sm group',
             isSelected && 'bg-primary/10 text-primary'
           )}
           style={{ paddingLeft: `${level * 20 + 8}px` }}
@@ -158,7 +158,7 @@ function TreeNode({
           {/* Expand/collapse icon */}
           {canExpand && (
             <button
-              className="flex-shrink-0 hover:bg-accent-foreground/10 rounded-sm p-0.5 transition-all"
+              className="flex-shrink-0 hover:bg-accent-foreground/10 rounded-sm p-0.5"
               onClick={(e) => {
                 e.stopPropagation();
                 onToggle(node.id);
@@ -209,13 +209,13 @@ function TreeNode({
           )}
 
           {(node.type === 'table' || node.type === 'view') && node.metadata?.rowCount !== undefined && (
-            <Badge variant="secondary" className="h-5 text-[10px] ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+            <Badge variant="secondary" className="h-5 text-[10px] ml-auto opacity-60 group-hover:opacity-100">
               {node.metadata.rowCount.toLocaleString()} rows
             </Badge>
           )}
 
           {node.type === 'column' && node.metadata && (
-            <div className="flex items-center gap-1 ml-auto opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 ml-auto opacity-60 group-hover:opacity-100">
               <Badge variant="outline" className="h-5 text-[10px]">
                 {node.metadata.dataType}
               </Badge>
@@ -241,7 +241,7 @@ function TreeNode({
 
       {/* Children */}
       {canExpand && isExpanded && hasChildren && (
-        <div className="animate-in slide-in-from-top-1 duration-200">
+        <div>
           {node.children!.map((child) => (
             <TreeNode
               key={child.id}
@@ -319,32 +319,34 @@ export function SchemaTree({
   }
 
   return (
-    <div className="relative flex h-full w-full flex-col">
-      <ScrollArea className="h-full w-full">
-        <div className="p-2 space-y-0.5">
-          {nodes.map((node) => (
-            <TreeNode
-              key={node.id}
-              node={node}
-              level={0}
-              isExpanded={expandedNodes.has(node.id)}
-              expandedNodes={expandedNodes}
-              onToggle={onToggleNode}
-              onTableSelect={onTableSelect}
-              onViewInfo={handleViewInfo}
-              selectedTable={selectedTable}
-              onCreateTable={onCreateTable}
-              onDropTable={onDropTable}
-              onAddColumn={onAddColumn}
-              onDropColumn={onDropColumn}
-              onInsertRow={onInsertRow}
-              onDeleteRows={onDeleteRows}
-              onDropSchema={onDropSchema}
-              onRenameSchema={onRenameSchema}
-            />
-          ))}
-        </div>
-      </ScrollArea>
+    <div className="relative h-full w-full">
+      <div className="absolute inset-0">
+        <ScrollArea className="h-full w-full">
+          <div className="p-2 space-y-0.5">
+            {nodes.map((node) => (
+              <TreeNode
+                key={node.id}
+                node={node}
+                level={0}
+                isExpanded={expandedNodes.has(node.id)}
+                expandedNodes={expandedNodes}
+                onToggle={onToggleNode}
+                onTableSelect={onTableSelect}
+                onViewInfo={handleViewInfo}
+                selectedTable={selectedTable}
+                onCreateTable={onCreateTable}
+                onDropTable={onDropTable}
+                onAddColumn={onAddColumn}
+                onDropColumn={onDropColumn}
+                onInsertRow={onInsertRow}
+                onDeleteRows={onDeleteRows}
+                onDropSchema={onDropSchema}
+                onRenameSchema={onRenameSchema}
+              />
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
 
       {/* Info Dialog */}
       <Dialog open={!!infoNode} onOpenChange={(open) => !open && handleCloseInfo()}>

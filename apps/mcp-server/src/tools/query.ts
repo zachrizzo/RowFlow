@@ -49,22 +49,27 @@ export async function handleQuery(args: QueryInput): Promise<QueryOutput> {
  * Adds LIMIT clause to query if not present
  */
 function addLimitToQuery(sql: string, maxRows: number): string {
-  const trimmedSql = sql.trim().toLowerCase();
+  const trimmed = sql.trim();
+  const hasSemicolon = trimmed.endsWith(';');
+  const withoutSemicolon = hasSemicolon ? trimmed.slice(0, -1).trimEnd() : trimmed;
 
-  // Check if LIMIT already exists
-  if (/\blimit\s+\d+/i.test(trimmedSql)) {
-    // Extract existing limit
-    const match = trimmedSql.match(/\blimit\s+(\d+)/i);
-    if (match) {
-      const existingLimit = parseInt(match[1], 10);
-      if (existingLimit <= maxRows) {
-        return sql; // Existing limit is fine
-      }
+  const limitRegex = /\blimit\s+(\d+)(\s+offset\s+\d+)?$/i;
+  const existing = withoutSemicolon.match(limitRegex);
+
+  if (existing) {
+    const existingLimit = parseInt(existing[1], 10);
+    if (existingLimit <= maxRows) {
+      return `${withoutSemicolon}${hasSemicolon ? ';' : ''}`;
     }
+    const offsetPart = existing[2] ?? '';
+    const replaced = withoutSemicolon.replace(
+      limitRegex,
+      `LIMIT ${maxRows}${offsetPart}`
+    );
+    return `${replaced}${hasSemicolon ? ';' : ''}`;
   }
 
-  // Add LIMIT clause
-  return `${sql.trim()} LIMIT ${maxRows}`;
+  return `${withoutSemicolon} LIMIT ${maxRows}${hasSemicolon ? ';' : ''}`;
 }
 
 /**
