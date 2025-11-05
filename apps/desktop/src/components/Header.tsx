@@ -1,28 +1,14 @@
-import { useState, useEffect } from 'react';
-import { Plus, Server, Settings, Database, X } from 'lucide-react';
+import { Plus, Settings, Database, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { isMcpServerBuilt } from '@/lib/mcpConfig';
 
 interface HeaderProps {
   onNewConnection: () => void;
-  onOpenMcpDialog: () => void;
   onOpenSettings: () => void;
   onToggleConnections?: () => void;
   connectionsOpen?: boolean;
 }
 
-export function Header({ onNewConnection, onOpenMcpDialog, onOpenSettings, onToggleConnections, connectionsOpen = false }: HeaderProps) {
-  const [mcpServerBuilt, setMcpServerBuilt] = useState(false);
-
-  // Check MCP server build status
-  useEffect(() => {
-    const checkMcpStatus = async () => {
-      const isBuilt = await isMcpServerBuilt();
-      setMcpServerBuilt(isBuilt);
-    };
-    checkMcpStatus();
-  }, []);
+export function Header({ onNewConnection, onOpenSettings, onToggleConnections, connectionsOpen = false }: HeaderProps) {
 
   return (
     <header className="h-12 border-b bg-background flex items-center justify-between px-4 shrink-0">
@@ -55,27 +41,6 @@ export function Header({ onNewConnection, onOpenMcpDialog, onOpenSettings, onTog
         >
           <Plus className="h-4 w-4 mr-2" />
           Add Connection
-        </Button>
-
-        {/* MCP Button */}
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={onOpenMcpDialog}
-          className="h-8 px-2"
-        >
-          <Badge
-            variant={mcpServerBuilt ? 'default' : 'outline'}
-            className="flex items-center gap-1 cursor-pointer hover:opacity-80"
-          >
-            <div
-              className={`h-2 w-2 rounded-full ${
-                mcpServerBuilt ? 'bg-green-500' : 'bg-gray-400'
-              }`}
-            />
-            <Server className="h-3 w-3" />
-            <span className="text-xs">MCP</span>
-          </Badge>
         </Button>
 
         {/* Settings Button */}

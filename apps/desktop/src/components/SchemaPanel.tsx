@@ -426,7 +426,7 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
         const key = `${node.schema}.${child.table}`;
         const columns = (child.children ?? [])
           .filter((grandChild) => grandChild.type === 'column')
-          .map((grandChild) => {
+          .map((grandChild): ColumnDetail | null => {
             const rawName = grandChild.name ?? '';
             if (rawName.trim().length === 0) {
               return null;
@@ -459,7 +459,7 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
               columnDefault: defaultValue,
               hasDefault,
               foreignKey,
-            } satisfies ColumnDetail;
+            };
           })
           .filter((column): column is ColumnDetail => column !== null)
           .sort((a, b) => a.name.localeCompare(b.name));
@@ -572,7 +572,8 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
             hasDefault: column.hasDefault,
             defaultValue: column.columnDefault,
             foreignKey: column.foreignKey,
-          };
+            mode: current.mode,
+          } as InsertRowFieldState;
         }
 
         return {
@@ -582,7 +583,7 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
           hasDefault: column.hasDefault,
           defaultValue: column.columnDefault,
           include: includeByDefault,
-          mode: 'value',
+          mode: 'value' as const,
           value: isBoolean ? 'true' : '',
           foreignKey: column.foreignKey,
           lookupPreview: undefined,

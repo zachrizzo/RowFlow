@@ -16,7 +16,6 @@ import { Toaster } from '@/components/ui/toaster';
 import { Settings } from '@/components/Settings';
 import { Header } from '@/components/Header';
 import { ConnectionForm } from '@/components/ConnectionForm';
-import { McpInfoDialog } from '@/components/McpInfoDialog';
 import {
   Dialog,
   DialogContent,
@@ -73,7 +72,6 @@ function AppContent() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [isConnectionFormOpen, setIsConnectionFormOpen] = useState(false);
   const [editingProfile, setEditingProfile] = useState<StoredProfile | undefined>();
-  const [isMcpDialogOpen, setIsMcpDialogOpen] = useState(false);
   const [connectionsSidebarOpen, setConnectionsSidebarOpen] = useState(false);
   const [schemaPanelSize, setSchemaPanelSize] = useState<PanelSize>('normal');
   const schemaPanelRef = useRef<ImperativePanelHandle>(null);
@@ -167,7 +165,6 @@ function AppContent() {
         {/* Header */}
         <Header
           onNewConnection={handleNewConnection}
-          onOpenMcpDialog={() => setIsMcpDialogOpen(true)}
           onOpenSettings={() => setSettingsOpen(true)}
           onToggleConnections={() => setConnectionsSidebarOpen(!connectionsSidebarOpen)}
           connectionsOpen={connectionsSidebarOpen}
@@ -256,9 +253,6 @@ function AppContent() {
           />
         </DialogContent>
       </Dialog>
-
-      {/* MCP Info Dialog */}
-      <McpInfoDialog open={isMcpDialogOpen} onOpenChange={setIsMcpDialogOpen} />
       
       <Toaster />
     </>
