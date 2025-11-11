@@ -1,8 +1,10 @@
 // Prevents additional console window on Windows in release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use rowflow_lib::ai::EmbeddingState;
 use rowflow_lib::state::AppState;
 use tauri::Manager;
+use tokio::sync::Mutex;
 
 fn main() {
     // Initialize logging
@@ -15,6 +17,27 @@ fn main() {
         .setup(|app| {
             let state = AppState::new();
             app.manage(state);
+
+            let data_dir = app.path().app_data_dir().unwrap_or_else(|_| {
+                let mut path = std::env::temp_dir();
+                path.push("RowFlow");
+                path
+            });
+
+            let resources_dir = app.path().resource_dir().unwrap_or_else(|_| {
+                std::env::current_dir().unwrap_or_default()
+            });
+
+            match EmbeddingState::new(data_dir, resources_dir) {
+                Ok(embedding_state) => {
+                    app.manage(Mutex::new(embedding_state));
+                    log::info!("Embedding state initialized");
+                }
+                Err(error) => {
+                    log::error!("Failed to initialize embedding subsystem: {}", error);
+                }
+            }
+
             log::info!("Application state initialized");
             Ok(())
         })
@@ -53,6 +76,19 @@ fn main() {
             rowflow_lib::commands::schema::drop_table,
             rowflow_lib::commands::schema::add_table_column,
             rowflow_lib::commands::schema::drop_table_column,
+            // AI + embeddings
+            rowflow_lib::commands::ai::check_ollama_status,
+            rowflow_lib::commands::ai::get_ollama_install_info,
+            rowflow_lib::commands::ai::install_ollama,
+            rowflow_lib::commands::ai::start_ollama,
+            rowflow_lib::commands::ai::stop_ollama,
+            rowflow_lib::commands::ai::pull_ollama_model,
+            rowflow_lib::commands::ai::embed_table,
+            rowflow_lib::commands::ai::search_embeddings,
+            rowflow_lib::commands::ai::get_embedding_metadata,
+            rowflow_lib::commands::ai::generate_sql_from_question,
+            rowflow_lib::commands::ai::classify_user_message,
+            rowflow_lib::commands::ai::delete_table_embeddings,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -15,6 +15,7 @@ import {
   setActiveProfileId,
 } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
+import { useAutoEmbed } from '@/hooks/useAutoEmbed';
 
 interface DatabaseContextType {
   // Connection states
@@ -51,6 +52,7 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null);
   const [profiles, setProfiles] = useState<StoredProfile[]>([]);
   const { toast } = useToast();
+  const { embedSchemaMetadata } = useAutoEmbed();
 
   // Load profiles on mount
   const loadProfiles = useCallback(async () => {
@@ -181,6 +183,12 @@ export function DatabaseProvider({ children }: DatabaseProviderProps) {
       toast({
         title: 'Connected',
         description: `Connected to ${profile.name}`,
+      });
+
+      // Auto-embed schema metadata in the background
+      embedSchemaMetadata(connectionId).catch((error) => {
+        console.error('[DatabaseContext] Auto-embedding failed:', error);
+        // Don't show error to user - auto-embedding is optional
       });
 
       return connectionId;

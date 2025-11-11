@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: rowflow-test-db
+    environment:
+      POSTGRES_USER: rowflow_test
+      POSTGRES_PASSWORD: test_password
+      POSTGRES_DB: rowflow_test
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5433:5432"  # Using 5433 to avoid conflicts with existing PostgreSQL
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+      - ./test-db-init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rowflow_test -d rowflow_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres-test-data:
+

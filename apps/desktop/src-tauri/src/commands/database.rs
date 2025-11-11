@@ -452,7 +452,7 @@ pub async fn delete_table_rows(
 }
 
 /// Helper function to convert a PostgreSQL row value to JSON
-fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type: &Type) -> Value {
+pub(crate) fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type: &Type) -> Value {
     match col_type {
         &Type::BOOL => row
             .try_get::<_, Option<bool>>(idx)

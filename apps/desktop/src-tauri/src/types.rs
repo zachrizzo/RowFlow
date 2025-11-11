@@ -200,6 +200,103 @@ pub struct ForeignKey {
     pub on_update: String,
 }
 
+/// Metadata about an Ollama model available locally
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OllamaModelInfo {
+    pub name: String,
+    pub size: Option<u64>,
+    pub digest: Option<String>,
+    pub modified_at: Option<String>,
+}
+
+/// Status information about the Ollama runtime
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OllamaStatus {
+    pub available: bool,
+    pub endpoint: String,
+    pub version: Option<String>,
+    pub models: Vec<OllamaModelInfo>,
+    pub message: Option<String>,
+}
+
+/// Installation information about Ollama
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OllamaInstallInfo {
+    pub is_bundled: bool,
+    pub is_installed: bool,
+    pub system_ollama_available: bool,
+    pub system_ollama_path: Option<String>,
+    pub models_dir: String,
+    pub models_size: u64,
+    pub models_size_formatted: String,
+}
+
+/// Request to generate embeddings for a table
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingJobRequest {
+    pub connection_id: String,
+    pub schema: String,
+    pub table: String,
+    pub columns: Vec<String>,
+    pub model: String,
+    pub limit: Option<i64>,
+}
+
+/// Result summary from an embedding job
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingJobResult {
+    pub embedded_rows: usize,
+    pub skipped_rows: usize,
+}
+
+/// Request to perform semantic search against stored embeddings
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingSearchRequest {
+    pub connection_id: String,
+    pub schema: Option<String>,
+    pub table: Option<String>,
+    pub query: String,
+    pub model: String,
+    pub top_k: usize,
+}
+
+/// A semantic search match result
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingSearchMatch {
+    pub row_reference: String,
+    pub schema: String,
+    pub table: String,
+    pub score: f32,
+    pub content: String,
+    pub metadata: serde_json::Value,
+}
+
+/// Metadata about embeddings for a table
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddingTableMetadata {
+    pub connection_id: String,
+    pub schema_name: String,
+    pub table_name: String,
+    pub row_count: i64,
+    pub last_updated: i64,
+}
+
 /// Constraint information
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]

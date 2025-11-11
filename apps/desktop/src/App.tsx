@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import {
   PanelGroup,
   Panel,
@@ -16,6 +17,8 @@ import { Toaster } from '@/components/ui/toaster';
 import { Settings } from '@/components/Settings';
 import { Header } from '@/components/Header';
 import { ConnectionForm } from '@/components/ConnectionForm';
+import { AiChat } from '@/components/AiChat';
+import type { EmbeddingSearchMatch } from '@/types/ai';
 import {
   Dialog,
   DialogContent,
@@ -26,6 +29,7 @@ import { useTheme } from '@/hooks/useTheme';
 import type { StoredProfile } from '@/types/connection';
 import { generateSelectQuery } from '@/lib/sqlPlaceholders';
 import { SettingsProvider, useSettings } from '@/contexts/SettingsContext';
+import { useDatabase } from '@/hooks/useDatabase';
 
 // Emergency fix: Clear corrupted localStorage data on app load
 try {
@@ -63,6 +67,7 @@ try {
 function AppContent() {
   // Initialize command palette keyboard listener
   useCommandPalette();
+  const { getActiveConnection } = useDatabase();
 
   const { settings } = useSettings();
   const tablePreviewLimit = settings.queryPreviewLimit;
@@ -75,6 +80,7 @@ function AppContent() {
   const [connectionsSidebarOpen, setConnectionsSidebarOpen] = useState(false);
   const [schemaPanelSize, setSchemaPanelSize] = useState<PanelSize>('normal');
   const schemaPanelRef = useRef<ImperativePanelHandle>(null);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
 
   const handleSchemaPanelSizeChange = useCallback((size: PanelSize) => {
     setSchemaPanelSize(size);
@@ -163,12 +169,14 @@ function AppContent() {
     <>
       <div className="h-screen w-screen overflow-hidden bg-background flex flex-col relative">
         {/* Header */}
-        <Header
-          onNewConnection={handleNewConnection}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onToggleConnections={() => setConnectionsSidebarOpen(!connectionsSidebarOpen)}
-          connectionsOpen={connectionsSidebarOpen}
-        />
+      <Header
+        onNewConnection={handleNewConnection}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onToggleConnections={() => setConnectionsSidebarOpen(!connectionsSidebarOpen)}
+        connectionsOpen={connectionsSidebarOpen}
+        onToggleAiChat={() => setAiChatOpen(!aiChatOpen)}
+        aiChatOpen={aiChatOpen}
+      />
 
         {/* Connections Sidebar */}
         <div
@@ -218,7 +226,7 @@ function AppContent() {
             <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors data-[resize-handle-active]:bg-primary" />
 
             {/* Query Editor and Results Panel */}
-            <Panel defaultSize={70} minSize={5}>
+            <Panel defaultSize={aiChatOpen ? 50 : 70} minSize={5}>
               <QueryPanel
                 onSqlInsert={(handler) => setInsertSqlHandler(() => handler)}
                 onTableContextChange={(context) => {
@@ -232,6 +240,118 @@ function AppContent() {
                 editingEnabled={settings.editingEnabled}
               />
             </Panel>
+
+            {/* AI Chat Panel */}
+            {aiChatOpen && (
+              <>
+                <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors data-[resize-handle-active]:bg-primary" />
+                <Panel defaultSize={30} minSize={20} maxSize={50}>
+                  <AiChat
+                    onOpenSettings={() => setSettingsOpen(true)}
+                    onSelectRow={async (match: EmbeddingSearchMatch) => {
+                      const activeConnection = getActiveConnection();
+                      // Build WHERE clause from metadata to find the exact row
+                      const metadata = match.metadata;
+                      const conditions: string[] = [];
+                      
+                      // Helper to quote identifiers
+                      const quoteId = (id: string) => `"${id.replace(/"/g, '""')}"`;
+                      
+                      // Helper to escape SQL values
+                      const escapeValue = (value: any): string => {
+                        if (value === null || value === undefined) {
+                          return 'NULL';
+                        }
+                        if (typeof value === 'string') {
+                          return `'${value.replace(/'/g, "''")}'`;
+                        }
+                        if (typeof value === 'number') {
+                          return String(value);
+                        }
+                        if (typeof value === 'boolean') {
+                          return value ? 'TRUE' : 'FALSE';
+                        }
+                        // For arrays/objects, convert to JSON string
+                        return `'${JSON.stringify(value).replace(/'/g, "''")}'`;
+                      };
+                      
+                      // Use metadata to build WHERE conditions
+                      // Use ALL non-null columns from metadata to uniquely identify the row
+                      if (metadata && typeof metadata === 'object') {
+                        // Get primary keys to prioritize them, but use all non-null columns
+                        let primaryKeys: string[] = [];
+                        try {
+                          const connectionId = activeConnection?.connectionId;
+                          if (connectionId) {
+                            primaryKeys = await invoke<string[]>('get_primary_keys', {
+                              connectionId,
+                              schema: match.schema,
+                              table: match.table,
+                            });
+                          }
+                        } catch (error) {
+                          console.warn('Failed to get primary keys, using all columns:', error);
+                        }
+                        
+                        // Collect all non-null values from metadata
+                        const allMetadataEntries = Object.entries(metadata).filter(
+                          ([_, value]) => value !== null && value !== undefined
+                        );
+                        
+                        // Sort to put primary keys first if available
+                        const sortedEntries = allMetadataEntries.sort(([keyA], [keyB]) => {
+                          const aIsPk = primaryKeys.includes(keyA);
+                          const bIsPk = primaryKeys.includes(keyB);
+                          if (aIsPk && !bIsPk) return -1;
+                          if (!aIsPk && bIsPk) return 1;
+                          return 0;
+                        });
+                        
+                        // Use all non-null columns to build WHERE clause
+                        // This ensures we match the exact row even if primary keys aren't in metadata
+                        sortedEntries.forEach(([key, value]) => {
+                          conditions.push(`${quoteId(key)} = ${escapeValue(value)}`);
+                        });
+                      }
+                      
+                      // Build SQL query - ALWAYS use conditions if we have metadata
+                      // This ensures we show only the specific row
+                      let sql: string;
+                      if (conditions.length > 0) {
+                        // Use conditions to show only the specific row (no LIMIT needed)
+                        sql = `SELECT * FROM ${quoteId(match.schema)}.${quoteId(match.table)} WHERE ${conditions.join(' AND ')};`;
+                        console.log('[RowSelection] Generated SQL:', sql);
+                        console.log('[RowSelection] Conditions:', conditions);
+                        console.log('[RowSelection] Metadata:', metadata);
+                      } else {
+                        // Fallback: if no metadata, show table with limit
+                        console.warn('[RowSelection] No conditions found, falling back to table view');
+                        sql = `SELECT * FROM ${quoteId(match.schema)}.${quoteId(match.table)} LIMIT 100;`;
+                      }
+                      
+                      if (insertSqlHandler) {
+                        // Don't set table context when showing a specific row
+                        // This prevents QueryPanel from overriding our SQL
+                        insertSqlHandler(sql, {
+                          execute: true,
+                          replace: true,
+                          tabName: `${match.schema}.${match.table} (Row)`,
+                          // Don't set context - let it be a SQL tab, not a table tab
+                        });
+                      }
+                    }}
+                    onExecuteSql={(sql: string) => {
+                      if (insertSqlHandler) {
+                        insertSqlHandler(sql, {
+                          execute: true,
+                          replace: true, // Clear existing SQL and replace with new
+                        });
+                      }
+                    }}
+                  />
+                </Panel>
+              </>
+            )}
           </PanelGroup>
         </div>
       </div>

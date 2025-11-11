@@ -18,6 +18,7 @@ import {
   Columns3,
   Trash2,
   MinusCircle,
+  Sparkles,
 } from 'lucide-react';
 import type { SchemaNode } from '@/types/schema';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +36,7 @@ interface SchemaNodeContextMenuProps {
   onDeleteRows?: (schema: string, table: string) => void;
   onDropSchema?: (schema: string) => void;
   onRenameSchema?: (schema: string) => void;
+  onEmbedTable?: (schema: string, table: string) => void;
 }
 
 export function SchemaNodeContextMenu({
@@ -50,6 +52,7 @@ export function SchemaNodeContextMenu({
   onDeleteRows,
   onDropSchema,
   onRenameSchema,
+  onEmbedTable,
 }: SchemaNodeContextMenuProps) {
   const { toast } = useToast();
 
@@ -154,6 +157,12 @@ export function SchemaNodeContextMenu({
     }
   };
 
+  const handleEmbedTable = () => {
+    if (node.schema && node.table && onEmbedTable) {
+      onEmbedTable(node.schema, node.table);
+    }
+  };
+
   // Determine which menu items to show based on node type
   const showTableActions = node.type === 'table' || node.type === 'view';
   const showColumnActions = node.type === 'column';
@@ -218,6 +227,13 @@ export function SchemaNodeContextMenu({
             <ContextMenuItem onClick={handleViewInfo}>
               <Info className="mr-2 h-4 w-4" />
               View Table Info
+            </ContextMenuItem>
+
+            <ContextMenuSeparator />
+
+            <ContextMenuItem onClick={handleEmbedTable}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Embed Table for AI
             </ContextMenuItem>
 
             <ContextMenuSeparator />

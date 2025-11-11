@@ -1,0 +1,19 @@
+{
+  "name": "Test Database",
+  "host": "localhost",
+  "port": 5432,
+  "database": "rowflow_test",
+  "username": "rowflow_test",
+  "password": "test_password",
+  "readOnly": false,
+  "useSsh": false,
+  "tlsConfig": {
+    "enabled": false,
+    "verifyCa": false
+  },
+  "connectionTimeout": 30,
+  "statementTimeout": 0,
+  "lockTimeout": 0,
+  "idleTimeout": 0
+}
+

@@ -40,6 +40,7 @@ interface SchemaTreeProps {
   onDeleteRows?: (schema: string, table: string) => void;
   onDropSchema?: (schema: string) => void;
   onRenameSchema?: (schema: string) => void;
+  onEmbedTable?: (schema: string, table: string) => void;
 }
 
 interface NodeIconProps {
@@ -87,6 +88,7 @@ interface TreeNodeProps {
   onDeleteRows?: (schema: string, table: string) => void;
   onDropSchema?: (schema: string) => void;
   onRenameSchema?: (schema: string) => void;
+  onEmbedTable?: (schema: string, table: string) => void;
 }
 
 function TreeNode({
@@ -106,6 +108,7 @@ function TreeNode({
   onDeleteRows,
   onDropSchema,
   onRenameSchema,
+  onEmbedTable,
 }: TreeNodeProps) {
   const hasChildren = node.children && node.children.length > 0;
   const canExpand = node.type === 'schema' || node.type === 'table' || node.type === 'view';
@@ -146,6 +149,7 @@ function TreeNode({
         onDeleteRows={onDeleteRows}
         onDropSchema={onDropSchema}
         onRenameSchema={onRenameSchema}
+        onEmbedTable={onEmbedTable}
       >
         <div
           className={cn(
@@ -208,7 +212,7 @@ function TreeNode({
             </div>
           )}
 
-          {(node.type === 'table' || node.type === 'view') && node.metadata?.rowCount !== undefined && (
+          {(node.type === 'table' || node.type === 'view') && node.metadata?.rowCount != null && (
             <Badge variant="secondary" className="h-5 text-[10px] ml-auto opacity-60 group-hover:opacity-100">
               {node.metadata.rowCount.toLocaleString()} rows
             </Badge>
@@ -261,6 +265,7 @@ function TreeNode({
               onDeleteRows={onDeleteRows}
               onDropSchema={onDropSchema}
               onRenameSchema={onRenameSchema}
+              onEmbedTable={onEmbedTable}
             />
           ))}
         </div>
@@ -284,6 +289,7 @@ export function SchemaTree({
   onDeleteRows,
   onDropSchema,
   onRenameSchema,
+  onEmbedTable,
 }: SchemaTreeProps) {
   const [infoNode, setInfoNode] = useState<SchemaNode | null>(null);
 
@@ -342,6 +348,7 @@ export function SchemaTree({
                 onDeleteRows={onDeleteRows}
                 onDropSchema={onDropSchema}
                 onRenameSchema={onRenameSchema}
+                onEmbedTable={onEmbedTable}
               />
             ))}
           </div>
@@ -398,7 +405,7 @@ export function SchemaTree({
                     </div>
                   )}
 
-                  {infoNode.metadata.rowCount !== undefined && (
+                  {infoNode.metadata.rowCount != null && (
                     <div className="grid grid-cols-3 gap-2 text-sm">
                       <span className="text-muted-foreground">Row Count:</span>
                       <span className="col-span-2">{infoNode.metadata.rowCount.toLocaleString()}</span>

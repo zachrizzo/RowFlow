@@ -19,6 +19,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": [
+      "resources/ollama"
+    ],
     "publisher": "RowFlow Team",
     "copyright": "Copyright (c) 2024 RowFlow Team",
     "category": "DeveloperTool",

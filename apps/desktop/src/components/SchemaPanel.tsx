@@ -46,8 +46,10 @@ import { SchemaSearch } from '@/components/SchemaSearch';
 import { SchemaTree } from '@/components/SchemaTree';
 import { SchemaGraph } from '@/components/SchemaGraph';
 import { useToast } from '@/hooks/use-toast';
+import type { EmbeddingJobRequest, EmbeddingJobResult } from '@/types/ai';
 import type {
   AddTableColumnRequest,
+  Column,
   CreateSchemaRequest,
   CreateTableRequest,
   DeleteRowRequest,
@@ -1461,6 +1463,65 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
     setDeleteRowsForm({ criteriaJson: '{\n  "id": 1\n}', limit: '1' });
   }, []);
 
+  const handleEmbedTable = useCallback(async (schema: string, table: string) => {
+    if (!connectionId) {
+      toast({
+        title: 'No connection',
+        description: 'Connect to a database before embedding tables.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Get columns for the table
+    try {
+      const columns = await invoke<Column[]>('get_table_columns', {
+        connectionId,
+        schema,
+        table,
+      });
+
+      if (columns.length === 0) {
+        toast({
+          title: 'No columns',
+          description: 'This table has no columns to embed.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      // Use all columns for embedding
+      const columnNames = columns.map((col) => col.name);
+
+      const request: EmbeddingJobRequest = {
+        connectionId,
+        schema,
+        table,
+        columns: columnNames,
+        model: 'nomic-embed-text:latest',
+      };
+
+      toast({
+        title: 'Embedding started',
+        description: `Generating embeddings for ${schema}.${table}...`,
+      });
+
+      const result = await invoke<EmbeddingJobResult>('embed_table', { request });
+
+      toast({
+        title: 'Embedding complete',
+        description: `Embedded ${result.embeddedRows} rows from ${schema}.${table}. You can now ask questions about this data in AI Chat!`,
+      });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to embed table';
+      toast({
+        title: 'Embedding failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    }
+  }, [connectionId, toast]);
+
   const handleDeleteRowsSubmit = useCallback(async () => {
     if (!connectionId) {
       toast({
@@ -1882,6 +1943,7 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
                 onDeleteRows={handleDeleteRows}
                 onDropSchema={openDropSchemaDialog}
                 onRenameSchema={openRenameSchemaDialog}
+                onEmbedTable={handleEmbedTable}
               />
             </div>
           </TabsContent>

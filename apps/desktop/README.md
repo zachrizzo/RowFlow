@@ -100,6 +100,13 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 ```
 
+## AI Embeddings (Preview)
+
+- Backend commands (`check_ollama_status`, `pull_ollama_model`, `embed_table`, `search_embeddings`) are now registered with Tauri, enabling local embedding experiments ahead of the full UI.
+- Embedding metadata persists to `ai/embeddings.db` inside the platform-specific app data directory.
+- Add Ollama binaries under `src-tauri/resources/ollama` before packaging, or install Ollama globally and let the commands reuse the existing daemon.
+- Invoke the commands from the frontend via `@tauri-apps/api/core.invoke` until dedicated panels are introduced.
+
 ## Dependencies
 
 ### Core Dependencies

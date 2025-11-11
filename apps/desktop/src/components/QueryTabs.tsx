@@ -271,6 +271,7 @@ export function useQueryTabs() {
     };
     setTabs((prev) => [...prev, newTab]);
     setActiveTabId(newTab.id);
+    return newTab.id;
   }, [tabs.length]);
 
   const closeTab = useCallback((tabId: string) => {

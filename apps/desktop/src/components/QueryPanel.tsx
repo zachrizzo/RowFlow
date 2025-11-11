@@ -280,17 +280,38 @@ export function QueryPanel({
       if (!activeTab || activeTab.viewType === 'table') {
         // Switch to or create a SQL tab
         const sqlTab = tabs.find(t => t.viewType === 'sql');
+        let targetTabId: string;
+        
         if (sqlTab) {
+          targetTabId = sqlTab.id;
           setActiveTabId(sqlTab.id);
         } else {
-          addTab();
-          // Wait for tab to be created, then update
+          // Create new tab and get its ID
+          const newTabId = addTab();
+          targetTabId = newTabId;
+          setActiveTabId(newTabId);
+        }
+        
+        // Update SQL immediately (updateTabSql handles the state update)
+        const insertSqlText = sanitizeSql(sql).trim();
+        if (insertSqlText) {
+          // For new tabs, use DEFAULT_SQL; for existing tabs, use their current SQL
+          const targetTab = tabs.find(t => t.id === targetTabId);
+          const existingSql = targetTab ? sanitizeSql(targetTab.sql) : DEFAULT_SQL;
+          const finalSql = options?.replace ? insertSqlText : 
+            [existingSql.trimEnd(), insertSqlText]
+              .filter(Boolean)
+              .join('\n')
+              .trim() || DEFAULT_SQL;
+          
+          // Use a small delay to ensure tab state is updated
           setTimeout(() => {
-            const newSqlTab = tabs.find(t => t.viewType === 'sql');
-            if (newSqlTab) {
-              setActiveTabId(newSqlTab.id);
+            updateTabSql(targetTabId, finalSql);
+            
+            if (options?.execute) {
+              executeQuery(finalSql).catch(console.error);
             }
-          }, 0);
+          }, 50);
         }
         return;
       }
@@ -304,14 +325,11 @@ export function QueryPanel({
 
       const shouldReplace =
         options?.replace ?? (!existingSql || isDefaultSql(existingSql));
-      const baseSql = shouldReplace ? '' : existingSql.trimEnd();
-
-      const combinedSql = [baseSql, insertSqlText]
-        .filter(Boolean)
-        .join('\n')
-        .trim();
-
-      const finalSql = combinedSql.length > 0 ? combinedSql : DEFAULT_SQL;
+      const finalSql = shouldReplace ? insertSqlText : 
+        [existingSql.trimEnd(), insertSqlText]
+          .filter(Boolean)
+          .join('\n')
+          .trim() || DEFAULT_SQL;
 
       updateTabSql(activeTab.id, finalSql);
 
@@ -348,11 +366,13 @@ export function QueryPanel({
       setActiveTabId,
       addTab,
       addTableTab,
+      connectionId,
       executeQuery,
       executeQueryStream,
       onTableContextChange,
       renameTab,
       tablePreviewLimit,
+      tableSortStates,
       updateTabContext,
       updateTabExecution,
       updateTabSql,

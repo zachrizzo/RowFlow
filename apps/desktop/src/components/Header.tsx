@@ -1,4 +1,4 @@
-import { Plus, Settings, Database, X } from 'lucide-react';
+import { Plus, Settings, Database, X, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface HeaderProps {
@@ -6,9 +6,11 @@ interface HeaderProps {
   onOpenSettings: () => void;
   onToggleConnections?: () => void;
   connectionsOpen?: boolean;
+  onToggleAiChat?: () => void;
+  aiChatOpen?: boolean;
 }
 
-export function Header({ onNewConnection, onOpenSettings, onToggleConnections, connectionsOpen = false }: HeaderProps) {
+export function Header({ onNewConnection, onOpenSettings, onToggleConnections, connectionsOpen = false, onToggleAiChat, aiChatOpen = false }: HeaderProps) {
 
   return (
     <header className="h-12 border-b bg-background flex items-center justify-between px-4 shrink-0">
@@ -32,6 +34,19 @@ export function Header({ onNewConnection, onOpenSettings, onToggleConnections, c
         <h1 className="text-lg font-semibold">RowFlow</h1>
       </div>
       <div className="flex items-center gap-2">
+        {/* AI Chat Toggle Button */}
+        {onToggleAiChat && (
+          <Button
+            size="icon"
+            variant={aiChatOpen ? "default" : "ghost"}
+            onClick={onToggleAiChat}
+            className="h-8 w-8"
+            title={aiChatOpen ? 'Hide AI Chat' : 'Show AI Chat'}
+          >
+            <Sparkles className="h-4 w-4" />
+          </Button>
+        )}
+        
         {/* Add Connection Button */}
         <Button
           size="sm"

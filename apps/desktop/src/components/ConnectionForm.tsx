@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -10,6 +10,8 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
+  Code,
+  FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -75,6 +77,9 @@ export function ConnectionForm({ profile, onSuccess, onCancel }: ConnectionFormP
   const [testResult, setTestResult] = useState<'success' | 'error' | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showSshOptions, setShowSshOptions] = useState(false);
+  const [inputMode, setInputMode] = useState<'form' | 'json'>('form');
+  const [jsonInput, setJsonInput] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
   const form = useForm<ConnectionFormValues>({
     resolver: zodResolver(connectionFormSchema),
@@ -105,12 +110,111 @@ export function ConnectionForm({ profile, onSuccess, onCancel }: ConnectionFormP
     },
   });
 
-  const handleTestConnection = async () => {
-    const values = form.getValues();
-    setIsTestingConnection(true);
-    setTestResult(null);
+  // Convert form values to JSON
+  const formValuesToJson = (values: ConnectionFormValues): string => {
+    const profileData = {
+      name: values.name,
+      host: values.host,
+      port: values.port,
+      database: values.database,
+      username: values.username,
+      password: values.password || undefined,
+      readOnly: values.readOnly,
+      useSsh: values.useSsh,
+      sshConfig: values.useSsh
+        ? {
+            host: values.sshHost || '',
+            port: values.sshPort || 22,
+            username: values.sshUsername || '',
+            password: values.sshPassword || undefined,
+            privateKeyPath: values.sshPrivateKeyPath || undefined,
+            passphrase: values.sshPassphrase || undefined,
+          }
+        : undefined,
+      tlsConfig: values.tlsEnabled
+        ? {
+            enabled: true,
+            verifyCa: values.tlsVerifyCa,
+            caCertPath: values.tlsCaCertPath || undefined,
+            clientCertPath: values.tlsClientCertPath || undefined,
+            clientKeyPath: values.tlsClientKeyPath || undefined,
+          }
+        : { enabled: false, verifyCa: false },
+      connectionTimeout: values.connectionTimeout,
+      statementTimeout: values.statementTimeout,
+      lockTimeout: values.lockTimeout,
+      idleTimeout: values.idleTimeout,
+    };
+    return JSON.stringify(profileData, null, 2);
+  };
 
-    const testProfile = {
+  // Initialize JSON input from form values when switching to JSON mode
+  useEffect(() => {
+    if (inputMode === 'json') {
+      const values = form.getValues();
+      setJsonInput(formValuesToJson(values));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputMode]);
+
+  // Parse JSON and populate form
+  const handleJsonToForm = () => {
+    try {
+      setJsonError(null);
+      const parsed = JSON.parse(jsonInput);
+      
+      // Validate required fields
+      if (!parsed.name || !parsed.host || !parsed.database || !parsed.username) {
+        throw new Error('Missing required fields: name, host, database, username');
+      }
+
+      // Populate form
+      form.reset({
+        name: parsed.name || '',
+        host: parsed.host || 'localhost',
+        port: parsed.port || 5432,
+        database: parsed.database || '',
+        username: parsed.username || '',
+        password: parsed.password || '',
+        readOnly: parsed.readOnly || false,
+        tlsEnabled: parsed.tlsConfig?.enabled || false,
+        tlsVerifyCa: parsed.tlsConfig?.verifyCa || false,
+        tlsCaCertPath: parsed.tlsConfig?.caCertPath || '',
+        tlsClientCertPath: parsed.tlsConfig?.clientCertPath || '',
+        tlsClientKeyPath: parsed.tlsConfig?.clientKeyPath || '',
+        useSsh: parsed.useSsh || false,
+        sshHost: parsed.sshConfig?.host || '',
+        sshPort: parsed.sshConfig?.port || 22,
+        sshUsername: parsed.sshConfig?.username || '',
+        sshPassword: parsed.sshConfig?.password || '',
+        sshPrivateKeyPath: parsed.sshConfig?.privateKeyPath || '',
+        sshPassphrase: parsed.sshConfig?.passphrase || '',
+        connectionTimeout: parsed.connectionTimeout ?? 30,
+        statementTimeout: parsed.statementTimeout ?? 0,
+        lockTimeout: parsed.lockTimeout ?? 0,
+        idleTimeout: parsed.idleTimeout ?? 0,
+      });
+
+      setInputMode('form');
+    } catch (error) {
+      setJsonError(error instanceof Error ? error.message : 'Invalid JSON');
+    }
+  };
+
+  // Update JSON when form values change (only if in form mode)
+  useEffect(() => {
+    if (inputMode === 'form') {
+      const subscription = form.watch(() => {
+        const values = form.getValues();
+        setJsonInput(formValuesToJson(values));
+      });
+      return () => subscription.unsubscribe();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inputMode]);
+
+  const getProfileFromForm = (values: ConnectionFormValues) => {
+    return {
       name: values.name,
       host: values.host,
       port: values.port,
@@ -143,6 +247,26 @@ export function ConnectionForm({ profile, onSuccess, onCancel }: ConnectionFormP
       lockTimeout: values.lockTimeout,
       idleTimeout: values.idleTimeout,
     };
+  };
+
+  const handleTestConnection = async () => {
+    setIsTestingConnection(true);
+    setTestResult(null);
+
+    let testProfile;
+    if (inputMode === 'json') {
+      try {
+        testProfile = JSON.parse(jsonInput);
+      } catch (error) {
+        setJsonError('Invalid JSON format');
+        setIsTestingConnection(false);
+        setTestResult('error');
+        return;
+      }
+    } else {
+      const values = form.getValues();
+      testProfile = getProfileFromForm(values);
+    }
 
     const result = await testConnection(testProfile);
     setIsTestingConnection(false);
@@ -150,39 +274,18 @@ export function ConnectionForm({ profile, onSuccess, onCancel }: ConnectionFormP
   };
 
   const onSubmit = async (values: ConnectionFormValues) => {
-    const profileData = {
-      name: values.name,
-      host: values.host,
-      port: values.port,
-      database: values.database,
-      username: values.username,
-      password: values.password,
-      readOnly: values.readOnly,
-      useSsh: values.useSsh,
-      sshConfig: values.useSsh
-        ? {
-            host: values.sshHost || '',
-            port: values.sshPort || 22,
-            username: values.sshUsername || '',
-            password: values.sshPassword,
-            privateKeyPath: values.sshPrivateKeyPath,
-            passphrase: values.sshPassphrase,
-          }
-        : undefined,
-      tlsConfig: values.tlsEnabled
-        ? {
-            enabled: true,
-            verifyCa: values.tlsVerifyCa,
-            caCertPath: values.tlsCaCertPath,
-            clientCertPath: values.tlsClientCertPath,
-            clientKeyPath: values.tlsClientKeyPath,
-          }
-        : { enabled: false, verifyCa: false },
-      connectionTimeout: values.connectionTimeout,
-      statementTimeout: values.statementTimeout,
-      lockTimeout: values.lockTimeout,
-      idleTimeout: values.idleTimeout,
-    };
+    let profileData;
+    
+    if (inputMode === 'json') {
+      try {
+        profileData = JSON.parse(jsonInput);
+      } catch (error) {
+        setJsonError('Invalid JSON format');
+        return;
+      }
+    } else {
+      profileData = getProfileFromForm(values);
+    }
 
     if (profile?.id) {
       await updateProfile({
@@ -198,15 +301,94 @@ export function ConnectionForm({ profile, onSuccess, onCancel }: ConnectionFormP
     onSuccess?.();
   };
 
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (inputMode === 'json') {
+      // In JSON mode, submit directly without form validation
+      onSubmit(form.getValues());
+    } else {
+      // In form mode, use form validation
+      form.handleSubmit(onSubmit)(e);
+    }
+  };
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={handleFormSubmit} className="space-y-4">
+        {/* Input Mode Toggle */}
+        <div className="flex items-center justify-between">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={inputMode === 'form' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setInputMode('form')}
+            >
+              <FileText className="h-4 w-4 mr-2" />
+              Form
+            </Button>
+            <Button
+              type="button"
+              variant={inputMode === 'json' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => {
+                if (inputMode === 'form') {
+                  const values = form.getValues();
+                  setJsonInput(formValuesToJson(values));
+                }
+                setInputMode('json');
+              }}
+            >
+              <Code className="h-4 w-4 mr-2" />
+              JSON
+            </Button>
+          </div>
+          {inputMode === 'json' && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleJsonToForm}
+            >
+              Load from JSON
+            </Button>
+          )}
+        </div>
+
         {/* Security Warning */}
         <Alert>
           <AlertDescription className="text-xs">
             Passwords are stored in plain text. Use with caution on shared systems.
           </AlertDescription>
         </Alert>
+
+        {/* JSON Input Mode */}
+        {inputMode === 'json' && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+              Connection JSON
+            </label>
+            <textarea
+              className="w-full min-h-[400px] rounded-md border border-input bg-background px-3 py-2 font-mono text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+              value={jsonInput}
+              onChange={(e) => {
+                setJsonInput(e.target.value);
+                setJsonError(null);
+              }}
+              placeholder='{\n  "name": "My Database",\n  "host": "localhost",\n  "port": 5432,\n  "database": "mydb",\n  "username": "user",\n  "password": "pass",\n  "readOnly": false\n}'
+            />
+            {jsonError && (
+              <p className="text-sm font-medium text-destructive mt-1">{jsonError}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Enter connection details as JSON. Click "Load from JSON" to populate the form, or test/save directly.
+            </p>
+          </div>
+        )}
+
+        {/* Form Input Mode */}
+        {inputMode === 'form' && (
+          <div key="form-mode">
 
         {/* Basic Connection Info */}
         <FormField
@@ -647,6 +829,8 @@ export function ConnectionForm({ profile, onSuccess, onCancel }: ConnectionFormP
             </Button>
           )}
         </div>
+          </div>
+        )}
       </form>
     </Form>
   );

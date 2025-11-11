@@ -37,11 +37,23 @@ pub enum RowFlowError {
     #[error("Invalid connection profile: {0}")]
     InvalidProfile(String),
 
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     #[error("Pool error: {0}")]
     PoolError(String),
 
     #[error("IO error: {0}")]
     IoError(String),
+
+    #[error("HTTP error: {0}")]
+    HttpError(String),
+
+    #[error("Vector store error: {0}")]
+    VectorStoreError(String),
+
+    #[error("Ollama error: {0}")]
+    OllamaError(String),
 
     #[error("Internal error: {0}")]
     InternalError(String),
@@ -80,6 +92,18 @@ impl From<serde_json::Error> for RowFlowError {
 impl From<std::io::Error> for RowFlowError {
     fn from(err: std::io::Error) -> Self {
         RowFlowError::IoError(err.to_string())
+    }
+}
+
+impl From<reqwest::Error> for RowFlowError {
+    fn from(err: reqwest::Error) -> Self {
+        RowFlowError::HttpError(err.to_string())
+    }
+}
+
+impl From<rusqlite::Error> for RowFlowError {
+    fn from(err: rusqlite::Error) -> Self {
+        RowFlowError::VectorStoreError(err.to_string())
     }
 }
 

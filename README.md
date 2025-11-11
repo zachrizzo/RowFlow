@@ -303,10 +303,9 @@ pnpm format:check
 ```bash
 # Run all tests
 pnpm test
-
-# Run E2E tests (if configured)
-pnpm test:e2e
 ```
+
+End-to-end tests are not yet configured in this repository.
 
 ---
 
@@ -476,6 +475,35 @@ RowFlow includes a Model Context Protocol (MCP) server that allows AI assistants
 - Connection pooling for efficient resource usage
 
 For more details, see [`apps/mcp-server/README.md`](apps/mcp-server/README.md) and [`apps/mcp-server/QUICKSTART.md`](apps/mcp-server/QUICKSTART.md).
+
+---
+
+## 🧠 Local Embeddings (Preview)
+
+RowFlow now ships an opt-in local embedding pipeline built around [Ollama](https://ollama.com/) so you can keep data-processing on-device while unlocking semantic search.
+
+### What’s included
+- **Bundled runtime hook**: the Tauri backend prepares a writable `ai/embeddings.db` store inside your app data directory and looks for a packaged Ollama binary under `src-tauri/resources/ollama` (copy your platform build there before bundling).
+- **Ollama management commands**:
+  - `check_ollama_status` – returns availability, version, and installed models.
+  - `pull_ollama_model` – pulls a model lazily after install (e.g. `nomic-embed-text`).
+- **Embedding workflow commands**:
+  - `embed_table` – extracts rows from a live Postgres connection, calls Ollama’s `/api/embed`, and persists vectors plus metadata in the local SQLite store.
+  - `search_embeddings` – embeds an ad-hoc natural-language query and performs cosine search over stored rows.
+
+> ℹ️ Frontend wiring will follow in a later iteration; for now these commands are exposed through the Tauri invoke layer for experimentation and automated workflows.
+
+### Getting started locally
+1. Install [Ollama](https://ollama.com/download) or place the runtime binary in `apps/desktop/src-tauri/resources/ollama` before running `pnpm tauri:dev`.
+2. Pull an embedding model once (e.g. from the terminal: `ollama pull nomic-embed-text`) or call the new `pull_ollama_model` command from the app.
+3. Start RowFlow (`pnpm dev` + `pnpm tauri:dev`) and invoke `embed_table` with the target connection, schema, table, columns, and model name.
+4. Use `search_embeddings` to retrieve the top matches for natural-language prompts and display the returned row metadata in your workflow of choice.
+
+### Notes & next steps
+- Embedding is opt-in per connection/table and runs entirely on the user’s machine.
+- The generated vectors live in `~/.local/share/RowFlow/ai/embeddings.db` (platform-specific path); remove the file to reset.
+- UI affordances for configuring models, monitoring progress, and rendering results are planned but out of scope for this PR.
+- The TypeScript bindings are generated from the Rust types (`pnpm build:types`) once the `typeshare` CLI is installed.
 
 ---
 
@@ -657,4 +685,3 @@ Built with amazing open-source tools:
 [Report Bug](https://github.com/zachrizzo/RowFlow/issues) · [Request Feature](https://github.com/zachrizzo/RowFlow/issues) · [Documentation](https://github.com/zachrizzo/RowFlow#-additional-documentation)
 
 </div>
-

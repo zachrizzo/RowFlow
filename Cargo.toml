@@ -35,6 +35,9 @@ typeshare = "1.0.3"
 thiserror = "2.0"
 anyhow = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", features = ["json"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+blake3 = "1.5"
 
 [workspace.lints.clippy]
 all = "warn"

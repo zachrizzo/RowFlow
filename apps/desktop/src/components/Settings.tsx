@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Moon, Sun, Server, CheckCircle2, XCircle, Copy, ExternalLink, Zap, Settings as SettingsIcon, Loader2 } from 'lucide-react';
+import { OllamaModelManager } from '@/components/OllamaModelManager';
 import {
   Dialog,
   DialogContent,
@@ -184,7 +185,7 @@ export function Settings({ open, onOpenChange }: SettingsProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
@@ -193,14 +194,22 @@ export function Settings({ open, onOpenChange }: SettingsProps) {
         </DialogHeader>
 
         <Tabs defaultValue="general" className="w-full flex flex-col flex-1 min-h-0 overflow-hidden">
-          <TabsList className="grid w-full grid-cols-2 flex-shrink-0 mb-2">
+          <TabsList className="grid w-full grid-cols-3 flex-shrink-0 mb-2">
             <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="ollama">AI Models</TabsTrigger>
             <TabsTrigger value="mcp">MCP Server</TabsTrigger>
           </TabsList>
 
+          {/* AI Models Tab */}
+          <TabsContent value="ollama" className="flex-1 flex flex-col mt-0 min-h-0 overflow-hidden data-[state=inactive]:hidden">
+            <div className="flex-1 overflow-y-auto space-y-6 py-4 pr-4 min-h-0">
+              <OllamaModelManager open />
+            </div>
+          </TabsContent>
+
           {/* General Settings Tab */}
-          <TabsContent value="general" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex data-[state=inactive]:hidden">
-            <div className="space-y-6 py-4 overflow-y-auto h-full">
+          <TabsContent value="general" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex data-[state=inactive]:hidden min-h-0">
+            <div className="h-full overflow-y-auto space-y-6 py-4">
               {/* Theme Toggle */}
               <div className="flex items-center justify-between">
               <div className="space-y-0.5">
@@ -282,8 +291,8 @@ export function Settings({ open, onOpenChange }: SettingsProps) {
           </TabsContent>
 
           {/* MCP Server Tab */}
-          <TabsContent value="mcp" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex data-[state=inactive]:hidden">
-            <div className="space-y-4 py-4 overflow-y-auto h-full">
+          <TabsContent value="mcp" className="flex-1 overflow-hidden mt-0 data-[state=active]:flex data-[state=inactive]:hidden min-h-0">
+            <div className="h-full overflow-y-auto space-y-4 py-4">
               {/* Server Status */}
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold flex items-center gap-2">
@@ -459,5 +468,4 @@ export function Settings({ open, onOpenChange }: SettingsProps) {
     </Dialog>
   );
 }
-
 
