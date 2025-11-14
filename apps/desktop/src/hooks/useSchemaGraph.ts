@@ -18,6 +18,8 @@ interface UseSchemaGraphResult {
   error: string | null;
   progress: { current: number; total: number } | null;
   hasMore: boolean;
+  totalTables: number;
+  loadedTables: number;
   loadMore: () => Promise<void>;
   refresh: () => Promise<void>;
 }
@@ -385,6 +387,8 @@ export function useSchemaGraph({
     error,
     progress,
     hasMore: loadedCount < allTables.length,
+    totalTables: allTables.length,
+    loadedTables: loadedCount,
     loadMore,
     refresh,
   };

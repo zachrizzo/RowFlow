@@ -34,7 +34,6 @@ import {
 } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
@@ -156,119 +155,117 @@ function TableNode({ data }: TableNodeComponentProps) {
       </div>
 
       {/* Columns List */}
-      <ScrollArea className="max-h-[400px]">
-        <div className="px-3 py-2 space-y-0.5">
-          {columns.length === 0 && (
-            <div className="text-muted-foreground text-[11px] py-2">
-              Columns unavailable
-            </div>
-          )}
+      <div className="px-3 py-2 space-y-0.5">
+        {columns.length === 0 && (
+          <div className="text-muted-foreground text-[11px] py-2">
+            Columns unavailable
+          </div>
+        )}
 
-          {columns.map((column) => {
-            const handleId = `${table.id}-${column.name}`;
-            const canNavigate = Boolean(column.isForeignKey && column.foreignKeyTable);
-            const foreignSchema = column.foreignKeySchema || table.schema;
+        {columns.map((column) => {
+          const handleId = `${table.id}-${column.name}`;
+          const canNavigate = Boolean(column.isForeignKey && column.foreignKeyTable);
+          const foreignSchema = column.foreignKeySchema || table.schema;
 
-            const handlePointerDown = (event: ReactPointerEvent | ReactMouseEvent) => {
-              if (!canNavigate) {
-                return;
-              }
+          const handlePointerDown = (event: ReactPointerEvent | ReactMouseEvent) => {
+            if (!canNavigate) {
+              return;
+            }
+            event.stopPropagation();
+          };
+
+          const onKeyDown = (event: KeyboardEvent) => {
+            if (!canNavigate) {
+              return;
+            }
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
               event.stopPropagation();
-            };
+              navigateToForeignKey(column);
+            }
+          };
 
-            const onKeyDown = (event: KeyboardEvent) => {
-              if (!canNavigate) {
-                return;
+          return (
+            <div
+              key={column.name}
+              className={cn(
+                'flex items-center justify-between gap-2 py-1 rounded-sm px-1 relative border border-transparent hover:bg-accent',
+                canNavigate
+                  ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1'
+                  : 'cursor-default',
+                highlightedColumnSet.has(column.name) && 'bg-primary/10 border-primary'
+              )}
+              tabIndex={canNavigate ? 0 : undefined}
+              role={canNavigate ? 'button' : undefined}
+              title={
+                canNavigate
+                  ? `Jump to ${foreignSchema}.${column.foreignKeyTable}`
+                  : undefined
               }
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
+              onClick={(event) => {
+                if (!canNavigate) {
+                  return;
+                }
                 event.stopPropagation();
                 navigateToForeignKey(column);
-              }
-            };
-
-            return (
-              <div
-                key={column.name}
-                className={cn(
-                  'flex items-center justify-between gap-2 py-1 rounded-sm px-1 relative border border-transparent hover:bg-accent',
-                  canNavigate
-                    ? 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1'
-                    : 'cursor-default',
-                  highlightedColumnSet.has(column.name) && 'bg-primary/10 border-primary'
-                )}
-                tabIndex={canNavigate ? 0 : undefined}
-                role={canNavigate ? 'button' : undefined}
-                title={
-                  canNavigate
-                    ? `Jump to ${foreignSchema}.${column.foreignKeyTable}`
-                    : undefined
-                }
-                onClick={(event) => {
-                  if (!canNavigate) {
-                    return;
-                  }
-                  event.stopPropagation();
-                  navigateToForeignKey(column);
+              }}
+              onPointerDown={handlePointerDown}
+              onKeyDown={onKeyDown}
+            >
+              {/* Left handle for incoming connections */}
+              <Handle
+                type="target"
+                position={Position.Left}
+                id={handleId}
+                className="!w-2 !h-2 !bg-blue-500 !border-2 !border-white"
+                style={{
+                  left: -6,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
                 }}
-                onPointerDown={handlePointerDown}
-                onKeyDown={onKeyDown}
-              >
-                {/* Left handle for incoming connections */}
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id={handleId}
-                  className="!w-2 !h-2 !bg-blue-500 !border-2 !border-white"
-                  style={{
-                    left: -6,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                  }}
-                />
+              />
 
-                <div className="flex items-center gap-1 flex-1 min-w-0">
-                  <span className="font-mono truncate text-[11px]">{column.name}</span>
-                  <span className="text-muted-foreground text-[10px] shrink-0">
-                    {column.dataType}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  {column.isPrimaryKey && (
-                    <Badge variant="default" className="bg-yellow-500 text-[9px] px-1 py-0">
-                      PK
-                    </Badge>
-                  )}
-                  {column.isForeignKey && (
-                    <Badge variant="secondary" className="text-[9px] px-1 py-0">
-                      FK
-                    </Badge>
-                  )}
-                  {!column.isNullable && (
-                    <span className="text-red-500 text-[9px] font-bold" title="NOT NULL">
-                      *
-                    </span>
-                  )}
-                </div>
-
-                {/* Right handle for outgoing connections */}
-                <Handle
-                  type="source"
-                  position={Position.Right}
-                  id={handleId}
-                  className="!w-2 !h-2 !bg-green-500 !border-2 !border-white"
-                  style={{
-                    right: -6,
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                  }}
-                />
+              <div className="flex items-center gap-1 flex-1 min-w-0">
+                <span className="font-mono truncate text-[11px]">{column.name}</span>
+                <span className="text-muted-foreground text-[10px] shrink-0">
+                  {column.dataType}
+                </span>
               </div>
-            );
-          })}
-        </div>
-      </ScrollArea>
+
+              <div className="flex items-center gap-1 shrink-0">
+                {column.isPrimaryKey && (
+                  <Badge variant="default" className="bg-yellow-500 text-[9px] px-1 py-0">
+                    PK
+                  </Badge>
+                )}
+                {column.isForeignKey && (
+                  <Badge variant="secondary" className="text-[9px] px-1 py-0">
+                    FK
+                  </Badge>
+                )}
+                {!column.isNullable && (
+                  <span className="text-red-500 text-[9px] font-bold" title="NOT NULL">
+                    *
+                  </span>
+                )}
+              </div>
+
+              {/* Right handle for outgoing connections */}
+              <Handle
+                type="source"
+                position={Position.Right}
+                id={handleId}
+                className="!w-2 !h-2 !bg-green-500 !border-2 !border-white"
+                style={{
+                  right: -6,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                }}
+              />
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -279,6 +276,7 @@ const nodeTypes: Record<string, ComponentType<TableNodeComponentProps>> = {
 
 const DEFAULT_WIDTH = 240;
 const DEFAULT_HEIGHT = 200;
+const DEFAULT_TABLE_LIMIT = 50;
 
 type LayoutResult = {
   nodes: TableNodeType[];
@@ -360,6 +358,8 @@ export function SchemaGraph({
   );
   const { toast } = useToast();
   const reactFlowInstanceRef = useRef<ReactFlowInstance<TableNodeType, SchemaFlowEdge> | null>(null);
+  const [tableLimit, setTableLimit] = useState(DEFAULT_TABLE_LIMIT);
+  const appliedTableLimitRef = useRef(tableLimit);
   const [isManualLayout, setIsManualLayout] = useState(false);
   const [nodePositions, setNodePositions] = useState<Record<string, { x: number; y: number }>>({});
   const [searchQuery, setSearchQuery] = useState('');
@@ -384,13 +384,53 @@ export function SchemaGraph({
     setIsolationEnabled(false);
   }, [selectedSchema, connectionId]);
 
-  const { nodes, edges, loading, error, progress, hasMore, loadMore, refresh } = useSchemaGraph({
+  const {
+    nodes,
+    edges,
+    loading,
+    error,
+    progress,
+    hasMore,
+    totalTables,
+    loadedTables,
+    refresh,
+  } = useSchemaGraph({
     connectionId,
     schema: selectedSchema === 'all' ? null : selectedSchema,
     autoLoad: true,
-    maxTables: 50,
+    maxTables: tableLimit,
     batchSize: 5,
   });
+
+  useEffect(() => {
+    if (!connectionId) {
+      setTableLimit(DEFAULT_TABLE_LIMIT);
+      appliedTableLimitRef.current = DEFAULT_TABLE_LIMIT;
+    }
+  }, [connectionId]);
+
+  useEffect(() => {
+    if (totalTables > 0 && tableLimit > totalTables) {
+      setTableLimit(totalTables);
+      appliedTableLimitRef.current = totalTables;
+    }
+  }, [totalTables, tableLimit]);
+
+  useEffect(() => {
+    if (!connectionId) {
+      return;
+    }
+    if (appliedTableLimitRef.current === tableLimit) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      appliedTableLimitRef.current = tableLimit;
+      void refresh();
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [tableLimit, refresh, connectionId]);
 
   const schemaNodeMap = useMemo(() => {
     const map = new Map<string, SchemaGraphNode>();
@@ -404,9 +444,7 @@ export function SchemaGraph({
     const flowNodes: TableNodeType[] = nodes.map((table) => {
       const headerHeight = 40;
       const columnHeight = 28;
-      const maxVisibleColumns = Math.floor((400 - headerHeight) / columnHeight);
-      const visibleColumns = Math.min(table.columns.length, maxVisibleColumns);
-      const estimatedHeight = headerHeight + visibleColumns * columnHeight + 20;
+      const estimatedHeight = headerHeight + table.columns.length * columnHeight + 20;
 
       return {
         id: table.id,
@@ -414,7 +452,7 @@ export function SchemaGraph({
         data: { table },
         position: { x: 0, y: 0 },
         width: 320,
-        height: Math.max(120, Math.min(estimatedHeight, 450)),
+        height: Math.max(120, estimatedHeight),
       } as TableNodeType;
     });
 
@@ -780,6 +818,35 @@ export function SchemaGraph({
             )}
           </div>
 
+          <div className="flex flex-col gap-1 min-w-[240px]">
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+              <span>Tables to load</span>
+              <span className="font-semibold text-foreground">
+                {totalTables === 0
+                  ? '… / …'
+                  : `${Math.min(tableLimit, totalTables)} / ${totalTables}`}
+              </span>
+            </div>
+            <input
+              type="range"
+              aria-label="Tables to load"
+              min={totalTables > 0 ? 1 : 0}
+              max={Math.max(totalTables, tableLimit, 1)}
+              value={tableLimit}
+              disabled={totalTables === 0}
+              onChange={(event) => setTableLimit(Number(event.target.value))}
+              className={cn(
+                'w-56 accent-primary cursor-pointer',
+                totalTables === 0 && 'cursor-not-allowed opacity-50'
+              )}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {totalTables === 0
+                ? 'Loading table metadata...'
+                : 'Drag to reload with more tables'}
+            </p>
+          </div>
+
           <div className="flex items-center gap-2 rounded-md border px-2 py-1 text-[11px]">
             <Move className="h-3.5 w-3.5 text-muted-foreground" />
             <span className="font-medium text-muted-foreground">Move nodes</span>
@@ -911,21 +978,15 @@ export function SchemaGraph({
           />
         </ReactFlow>
 
-        {hasMore && !loading && (
-          <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-20">
-            <Button variant="default" size="sm" onClick={loadMore} className="shadow-lg">
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Load More Tables ({nodes.length} loaded)
-            </Button>
-          </div>
-        )}
       </div>
 
       {nodes.length > 0 && (
         <div className="text-xs text-muted-foreground text-center py-2">
           Showing {nodes.length} table{nodes.length !== 1 ? 's' : ''} with {edges.length} relationship
           {edges.length !== 1 ? 's' : ''}
-          {hasMore && ` • ${hasMore ? 'More available' : 'All tables loaded'}`}
+          {hasMore
+            ? ' • More tables available (increase the slider to load them)'
+            : ' • All tables loaded'}
         </div>
       )}
     </div>
