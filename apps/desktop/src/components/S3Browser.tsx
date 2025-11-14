@@ -18,7 +18,7 @@ interface S3BrowserProps {
   onClose?: () => void;
 }
 
-export function S3Browser({ profile, onClose }: S3BrowserProps) {
+export function S3Browser({ profile }: S3BrowserProps) {
   const { connectS3, disconnectS3, listS3Objects, deleteS3Objects, putS3Object } = useS3();
   const { toast } = useToast();
   const [connectionId, setConnectionId] = useState<string | null>(null);
@@ -213,6 +213,7 @@ export function S3Browser({ profile, onClose }: S3BrowserProps) {
 
       for (let i = 0; i < fileArray.length; i++) {
         const file = fileArray[i];
+        if (!file) continue;
         const fileId = file.name;
 
         try {

@@ -886,8 +886,7 @@ export function SchemaGraph({
           nodesConnectable={false}
           onNodeDragStop={handleNodeDragStop}
           onInit={handleReactFlowInit}
-          nodeDragHandle={isManualLayout ? '.schema-table-drag-handle' : undefined}
-          onNodeClick={(event, node) => {
+          onNodeClick={(event) => {
             // Prevent node clicks from interfering with button clicks
             const target = event.target as HTMLElement;
             if (target.closest('button') || target.closest('[role="button"]')) {
