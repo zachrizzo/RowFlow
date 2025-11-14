@@ -86,7 +86,8 @@ impl OllamaSupervisor {
         // Ensure bundled binary exists
         if !self.config.binary_path.exists() {
             return Err(RowFlowError::OllamaError(
-                "Ollama binary not found. Please install Ollama or bundle it with the app.".to_string(),
+                "Ollama binary not found. Please install Ollama or bundle it with the app."
+                    .to_string(),
             ));
         }
 
@@ -161,9 +162,7 @@ impl OllamaSupervisor {
 
             #[cfg(windows)]
             {
-                let _ = Command::new("taskkill")
-                    .args(&["/PID", &pid.to_string(), "/F"])
-                    .output();
+                let _ = Command::new("taskkill").args(&["/PID", &pid.to_string(), "/F"]).output();
             }
         }
 
@@ -177,9 +176,7 @@ impl OllamaSupervisor {
     /// Check if Ollama process is healthy
     pub async fn health_check(&self) -> Result<bool> {
         let endpoint = format!("http://127.0.0.1:{}", self.config.port);
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(5))
-            .build()?;
+        let client = reqwest::Client::builder().timeout(Duration::from_secs(5)).build()?;
 
         match client.get(&format!("{}/api/version", endpoint)).send().await {
             Ok(response) => {
@@ -216,9 +213,7 @@ impl OllamaSupervisor {
 
         if state.restart_count >= self.config.max_restart_attempts {
             state.status = OllamaProcessStatus::Failed;
-            return Err(RowFlowError::OllamaError(
-                "Max restart attempts exceeded".to_string(),
-            ));
+            return Err(RowFlowError::OllamaError("Max restart attempts exceeded".to_string()));
         }
 
         state.restart_count += 1;
@@ -265,11 +260,8 @@ impl OllamaSupervisor {
     /// Detect system Ollama installation
     async fn detect_system_ollama(&self) -> Result<Option<PathBuf>> {
         // Check common locations
-        let candidates = vec![
-            "/usr/local/bin/ollama",
-            "/opt/homebrew/bin/ollama",
-            "/usr/bin/ollama",
-        ];
+        let candidates =
+            vec!["/usr/local/bin/ollama", "/opt/homebrew/bin/ollama", "/usr/bin/ollama"];
 
         for path in candidates {
             let path = PathBuf::from(path);

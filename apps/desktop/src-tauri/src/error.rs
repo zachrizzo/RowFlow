@@ -61,7 +61,21 @@ pub enum RowFlowError {
 
 impl From<tokio_postgres::Error> for RowFlowError {
     fn from(err: tokio_postgres::Error) -> Self {
-        RowFlowError::QueryError(err.to_string())
+        if let Some(db_error) = err.as_db_error() {
+            let mut message = db_error.message().to_string();
+
+            if let Some(detail) = db_error.detail() {
+                message.push_str(&format!(" Detail: {}", detail));
+            }
+
+            if let Some(hint) = db_error.hint() {
+                message.push_str(&format!(" Hint: {}", hint));
+            }
+
+            RowFlowError::QueryError(message)
+        } else {
+            RowFlowError::QueryError(err.to_string())
+        }
     }
 }
 

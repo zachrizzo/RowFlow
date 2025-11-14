@@ -41,6 +41,7 @@ interface SchemaTreeProps {
   onDropSchema?: (schema: string) => void;
   onRenameSchema?: (schema: string) => void;
   onEmbedTable?: (schema: string, table: string) => void;
+  onGenerateTestData?: (schema: string, table: string) => void;
 }
 
 interface NodeIconProps {
@@ -89,6 +90,7 @@ interface TreeNodeProps {
   onDropSchema?: (schema: string) => void;
   onRenameSchema?: (schema: string) => void;
   onEmbedTable?: (schema: string, table: string) => void;
+  onGenerateTestData?: (schema: string, table: string) => void;
 }
 
 function TreeNode({
@@ -109,6 +111,7 @@ function TreeNode({
   onDropSchema,
   onRenameSchema,
   onEmbedTable,
+  onGenerateTestData,
 }: TreeNodeProps) {
   const hasChildren = node.children && node.children.length > 0;
   const canExpand = node.type === 'schema' || node.type === 'table' || node.type === 'view';
@@ -150,6 +153,7 @@ function TreeNode({
         onDropSchema={onDropSchema}
         onRenameSchema={onRenameSchema}
         onEmbedTable={onEmbedTable}
+        onGenerateTestData={onGenerateTestData}
       >
         <div
           className={cn(
@@ -266,6 +270,7 @@ function TreeNode({
               onDropSchema={onDropSchema}
               onRenameSchema={onRenameSchema}
               onEmbedTable={onEmbedTable}
+              onGenerateTestData={onGenerateTestData}
             />
           ))}
         </div>
@@ -290,6 +295,7 @@ export function SchemaTree({
   onDropSchema,
   onRenameSchema,
   onEmbedTable,
+  onGenerateTestData,
 }: SchemaTreeProps) {
   const [infoNode, setInfoNode] = useState<SchemaNode | null>(null);
 
@@ -349,6 +355,7 @@ export function SchemaTree({
                 onDropSchema={onDropSchema}
                 onRenameSchema={onRenameSchema}
                 onEmbedTable={onEmbedTable}
+                onGenerateTestData={onGenerateTestData}
               />
             ))}
           </div>

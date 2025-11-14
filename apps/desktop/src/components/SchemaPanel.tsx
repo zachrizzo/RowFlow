@@ -46,6 +46,7 @@ import { SchemaSearch } from '@/components/SchemaSearch';
 import { SchemaTree } from '@/components/SchemaTree';
 import { SchemaGraph } from '@/components/SchemaGraph';
 import { useToast } from '@/hooks/use-toast';
+import { GenerateTestDataDialog } from '@/components/GenerateTestDataDialog';
 import type { EmbeddingJobRequest, EmbeddingJobResult } from '@/types/ai';
 import type {
   AddTableColumnRequest,
@@ -290,9 +291,16 @@ interface SchemaPanelProps {
   selectedTable?: { schema: string; table: string } | null;
   panelSize?: PanelSize;
   onPanelSizeChange?: (size: PanelSize) => void;
+  onOpenSettings?: () => void;
 }
 
-export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal', onPanelSizeChange }: SchemaPanelProps) {
+export function SchemaPanel({
+  onTableSelect,
+  selectedTable,
+  panelSize = 'normal',
+  onPanelSizeChange,
+  onOpenSettings,
+}: SchemaPanelProps) {
   const { getActiveConnection } = useDatabase();
   const activeConnection = getActiveConnection();
   const { toast } = useToast();
@@ -354,6 +362,7 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
   });
   const [renameSchemaTarget, setRenameSchemaTarget] = useState<RenameSchemaFormState | null>(null);
   const [dropSchemaTarget, setDropSchemaTarget] = useState<DropSchemaFormState | null>(null);
+  const [generateTestDataTarget, setGenerateTestDataTarget] = useState<{ schema: string; table: string } | null>(null);
 
   const {
     nodes,
@@ -1522,6 +1531,10 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
     }
   }, [connectionId, toast]);
 
+  const handleGenerateTestData = useCallback((schema: string, table: string) => {
+    setGenerateTestDataTarget({ schema, table });
+  }, []);
+
   const handleDeleteRowsSubmit = useCallback(async () => {
     if (!connectionId) {
       toast({
@@ -1944,6 +1957,7 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
                 onDropSchema={openDropSchemaDialog}
                 onRenameSchema={openRenameSchemaDialog}
                 onEmbedTable={handleEmbedTable}
+                onGenerateTestData={handleGenerateTestData}
               />
             </div>
           </TabsContent>
@@ -2122,6 +2136,21 @@ export function SchemaPanel({ onTableSelect, selectedTable, panelSize = 'normal'
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {generateTestDataTarget && (
+        <GenerateTestDataDialog
+          open={!!generateTestDataTarget}
+          schema={generateTestDataTarget.schema}
+          table={generateTestDataTarget.table}
+          connectionId={connectionId}
+          onOpenSettings={onOpenSettings}
+          onOpenChange={(open) => {
+            if (!open) {
+              setGenerateTestDataTarget(null);
+            }
+          }}
+        />
+      )}
 
       <Dialog
         open={createTableSchema !== null}

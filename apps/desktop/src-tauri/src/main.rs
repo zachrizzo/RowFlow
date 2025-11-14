@@ -24,9 +24,10 @@ fn main() {
                 path
             });
 
-            let resources_dir = app.path().resource_dir().unwrap_or_else(|_| {
-                std::env::current_dir().unwrap_or_default()
-            });
+            let resources_dir = app
+                .path()
+                .resource_dir()
+                .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
 
             match EmbeddingState::new(data_dir, resources_dir) {
                 Ok(embedding_state) => {
@@ -89,6 +90,7 @@ fn main() {
             rowflow_lib::commands::ai::generate_sql_from_question,
             rowflow_lib::commands::ai::classify_user_message,
             rowflow_lib::commands::ai::delete_table_embeddings,
+            rowflow_lib::commands::ai::generate_test_data,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

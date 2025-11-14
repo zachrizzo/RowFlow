@@ -1,4 +1,4 @@
-use super::{OllamaClient, OllamaBundler, OllamaSupervisor, SupervisorConfig, VectorStore};
+use super::{OllamaBundler, OllamaClient, OllamaSupervisor, SupervisorConfig, VectorStore};
 use crate::error::Result;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -22,12 +22,7 @@ impl EmbeddingState {
         // This will be updated if we start our own supervised instance
         let ollama_client = OllamaClient::new(None);
 
-        Ok(Self {
-            vector_store,
-            ollama_client,
-            supervisor: None,
-            bundler,
-        })
+        Ok(Self { vector_store, ollama_client, supervisor: None, bundler })
     }
 
     /// Initialize and start supervised Ollama instance
@@ -51,7 +46,9 @@ impl EmbeddingState {
             }
         } else {
             self.bundler.binary_path().ok_or_else(|| {
-                crate::error::RowFlowError::OllamaError("Failed to locate Ollama binary".to_string())
+                crate::error::RowFlowError::OllamaError(
+                    "Failed to locate Ollama binary".to_string(),
+                )
             })?
         };
 

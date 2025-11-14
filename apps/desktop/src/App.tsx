@@ -219,6 +219,7 @@ function AppContent() {
                 selectedTable={selectedTable}
                 panelSize={schemaPanelSize}
                 onPanelSizeChange={handleSchemaPanelSizeChange}
+                onOpenSettings={() => setSettingsOpen(true)}
               />
             </Panel>
 

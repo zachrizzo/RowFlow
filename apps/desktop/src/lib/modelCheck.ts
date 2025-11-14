@@ -4,7 +4,7 @@ import * as React from 'react';
 import { ToastAction } from '@/components/ui/toast';
 
 const EMBEDDING_MODEL = 'nomic-embed-text:latest';
-const CHAT_MODEL = 'qwen3:4b';
+const CHAT_MODEL = 'gemma3:4b';
 
 /**
  * Check if a model is available in the installed models

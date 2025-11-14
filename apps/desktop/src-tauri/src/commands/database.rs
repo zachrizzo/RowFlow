@@ -1,16 +1,19 @@
-use super::schema::{qualified_table_name, quote_identifier, validate_identifier};
+use super::schema::{
+    get_table_columns, qualified_table_name, quote_identifier, validate_identifier,
+};
 use crate::error::{Result, RowFlowError};
 use crate::state::AppState;
 use crate::types::{
-    ConnectionInfo, ConnectionProfile, DeleteRowRequest, FieldInfo, ForeignKeySearchRequest,
-    ForeignKeySearchResult, InsertRowRequest, QueryResult,
+    Column, ConnectionInfo, ConnectionProfile, DeleteRowRequest, FieldInfo,
+    ForeignKeySearchRequest, ForeignKeySearchResult, InsertRowRequest, QueryResult,
 };
-use serde_json::Value;
+use serde_json::{Number, Value};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::time::Instant;
 use tauri::State;
-use tokio_postgres::types::{Json, ToSql, Type};
+use tokio_postgres::types::{FromSqlOwned, Json, ToSql, Type};
 use uuid::Uuid;
 
 /// Connect to a PostgreSQL database
@@ -252,16 +255,37 @@ fn escape_sql_string(value: &str) -> String {
     value.replace('\'', "''")
 }
 
-fn value_to_sql_literal(value: &Value) -> String {
-    match value {
-        Value::Null => "NULL".to_string(),
-        Value::Bool(b) => {
-            if *b {
-                "TRUE".to_string()
-            } else {
-                "FALSE".to_string()
+fn value_to_sql_literal(value: &Value, column: &Column) -> Result<String> {
+    if is_array_column(column) {
+        return Ok(value_to_array_literal(value));
+    }
+
+    if is_json_column(column) {
+        let json_text = serde_json::to_string(value).unwrap_or_else(|_| "null".to_string());
+        let cast = json_cast_for_column(column).unwrap_or("::jsonb");
+        return Ok(format!("'{}'{}", escape_sql_string(&json_text), cast));
+    }
+
+    if is_numeric_column(column) {
+        let literal = match value {
+            Value::Null => "NULL".to_string(),
+            Value::Number(num) => num.to_string(),
+            Value::String(text) => text.clone(),
+            Value::Bool(flag) => {
+                if *flag {
+                    "1".to_string()
+                } else {
+                    "0".to_string()
+                }
             }
-        }
+            _ => value.to_string(),
+        };
+        return Ok(literal);
+    }
+
+    let literal = match value {
+        Value::Null => "NULL".to_string(),
+        Value::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
         Value::Number(num) => {
             if let Some(i) = num.as_i64() {
                 i.to_string()
@@ -279,9 +303,92 @@ fn value_to_sql_literal(value: &Value) -> String {
         }
         Value::String(text) => format!("'{}'", escape_sql_string(text)),
         Value::Array(_) | Value::Object(_) => match serde_json::to_string(value) {
-            Ok(json) => format!("'{}'::jsonb", escape_sql_string(&json)),
+            Ok(json) => format!("'{}'", escape_sql_string(&json)),
             Err(_) => "NULL".to_string(),
         },
+    };
+
+    Ok(literal)
+}
+
+fn is_array_column(column: &Column) -> bool {
+    let data_type = column.data_type.to_ascii_lowercase();
+    data_type.contains("array") || data_type.ends_with("[]")
+}
+
+fn is_numeric_column(column: &Column) -> bool {
+    let data_type = column.data_type.to_ascii_lowercase();
+    data_type.contains("numeric") || data_type.contains("decimal")
+}
+
+fn json_cast_for_column(column: &Column) -> Option<&'static str> {
+    let data_type = column.data_type.to_ascii_lowercase();
+    match data_type.as_str() {
+        "json" => Some("::json"),
+        "jsonb" => Some("::jsonb"),
+        _ => None,
+    }
+}
+
+fn is_json_column(column: &Column) -> bool {
+    json_cast_for_column(column).is_some()
+}
+
+fn escape_array_element(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\")")
+}
+
+fn format_array_elements(values: &[Value]) -> String {
+    values
+        .iter()
+        .map(|value| match value {
+            Value::Array(nested) => format!("{{{}}}", format_array_elements(nested)),
+            Value::String(text) => format!("\"{}\"", escape_array_element(text)),
+            Value::Number(num) => num.to_string(),
+            Value::Bool(flag) => if *flag { "TRUE" } else { "FALSE" }.to_string(),
+            Value::Null => "NULL".to_string(),
+            Value::Object(obj) => {
+                let json = serde_json::to_string(obj).unwrap_or_else(|_| "{}".to_string());
+                format!("\"{}\"", escape_array_element(&json))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(",")
+}
+
+fn build_array_literal(values: &[Value]) -> String {
+    if values.is_empty() {
+        "'{}'".to_string()
+    } else {
+        format!("'{{{}}}'", format_array_elements(values))
+    }
+}
+
+fn value_to_array_literal(value: &Value) -> String {
+    match value {
+        Value::Null => "NULL".to_string(),
+        Value::Array(items) => build_array_literal(items),
+        Value::String(text) => {
+            if let Ok(Value::Array(inner)) = serde_json::from_str::<Value>(text) {
+                return build_array_literal(&inner);
+            }
+
+            let parts: Vec<Value> = text
+                .split(',')
+                .map(|segment| Value::String(segment.trim().to_string()))
+                .filter(|value| match value {
+                    Value::String(s) => !s.is_empty(),
+                    _ => true,
+                })
+                .collect();
+
+            if !parts.is_empty() {
+                build_array_literal(&parts)
+            } else {
+                build_array_literal(&[Value::String(text.clone())])
+            }
+        }
+        other => build_array_literal(&[other.clone()]),
     }
 }
 
@@ -336,13 +443,39 @@ pub async fn insert_table_row(
 
     let table = qualified_table_name(&request.schema, &request.table_name)?;
 
+    let columns_metadata = get_table_columns(
+        state.clone(),
+        connection_id.clone(),
+        request.schema.clone(),
+        request.table_name.clone(),
+    )
+    .await?;
+
+    let column_lookup: HashMap<String, Column> =
+        columns_metadata.into_iter().map(|column| (column.name.clone(), column)).collect();
+
     let mut columns = Vec::with_capacity(request.row.values.len());
     let mut values = Vec::with_capacity(request.row.values.len());
 
     for (column, value) in &request.row.values {
         validate_identifier(column, "column")?;
+        let column_info = column_lookup.get(column).ok_or_else(|| {
+            RowFlowError::InvalidInput(format!(
+                "Column '{}' does not exist on {}.{}",
+                column, request.schema, request.table_name
+            ))
+        })?;
+
         columns.push(quote_identifier(column));
-        values.push(value_to_sql_literal(value));
+        let literal = value_to_sql_literal(value, column_info)?;
+        log::info!(
+            "[insert_table_row] column={} type={} input={} literal={}",
+            column,
+            column_info.data_type,
+            value,
+            literal
+        );
+        values.push(literal);
     }
 
     let sql =
@@ -429,14 +562,31 @@ pub async fn delete_table_rows(
 
     let table = qualified_table_name(&request.schema, &request.table_name)?;
 
+    let columns_metadata = get_table_columns(
+        state.clone(),
+        connection_id.clone(),
+        request.schema.clone(),
+        request.table_name.clone(),
+    )
+    .await?;
+    let column_lookup: HashMap<String, Column> =
+        columns_metadata.into_iter().map(|column| (column.name.clone(), column)).collect();
+
     let mut predicates = Vec::with_capacity(request.criteria.values.len());
     for (column, value) in &request.criteria.values {
         validate_identifier(column, "column")?;
+        let column_info = column_lookup.get(column).ok_or_else(|| {
+            RowFlowError::InvalidInput(format!(
+                "Column '{}' does not exist on {}.{}",
+                column, request.schema, request.table_name
+            ))
+        })?;
         let ident = quote_identifier(column);
         let predicate = if value.is_null() {
             format!("{ident} IS NULL")
         } else {
-            format!("{ident} = {}", value_to_sql_literal(value))
+            let literal = value_to_sql_literal(value, column_info)?;
+            format!("{ident} = {literal}")
         };
         predicates.push(predicate);
     }
@@ -482,16 +632,17 @@ pub(crate) fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type:
             .try_get::<_, Option<f32>>(idx)
             .ok()
             .flatten()
-            .and_then(|v| serde_json::Number::from_f64(v as f64))
+            .and_then(|v| Number::from_f64(v as f64))
             .map(Value::Number)
             .unwrap_or(Value::Null),
         &Type::FLOAT8 => row
             .try_get::<_, Option<f64>>(idx)
             .ok()
             .flatten()
-            .and_then(serde_json::Number::from_f64)
+            .and_then(Number::from_f64)
             .map(Value::Number)
             .unwrap_or(Value::Null),
+        &Type::NUMERIC => numeric_cell_to_value(row, idx),
         &Type::UUID => row
             .try_get::<_, Option<Uuid>>(idx)
             .ok()
@@ -504,6 +655,26 @@ pub(crate) fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type:
             .flatten()
             .map(Value::String)
             .unwrap_or(Value::Null),
+        &Type::TEXT_ARRAY | &Type::VARCHAR_ARRAY | &Type::BPCHAR_ARRAY | &Type::NAME_ARRAY => {
+            array_cell_to_value(row, idx, |v: String| Some(Value::String(v)))
+        }
+        &Type::INT2_ARRAY => {
+            array_cell_to_value(row, idx, |v: i16| Some(Value::Number(Number::from(v as i64))))
+        }
+        &Type::INT4_ARRAY => {
+            array_cell_to_value(row, idx, |v: i32| Some(Value::Number(Number::from(v as i64))))
+        }
+        &Type::INT8_ARRAY => {
+            array_cell_to_value(row, idx, |v: i64| Some(Value::Number(Number::from(v))))
+        }
+        &Type::FLOAT4_ARRAY => {
+            array_cell_to_value(row, idx, |v: f32| Number::from_f64(v as f64).map(Value::Number))
+        }
+        &Type::FLOAT8_ARRAY | &Type::NUMERIC_ARRAY => {
+            array_cell_to_value(row, idx, |v: f64| Number::from_f64(v).map(Value::Number))
+        }
+        &Type::BOOL_ARRAY => array_cell_to_value(row, idx, |v: bool| Some(Value::Bool(v))),
+        &Type::JSON_ARRAY => array_cell_to_value(row, idx, |v: Value| Some(v)),
         &Type::JSON | &Type::JSONB => {
             row.try_get::<_, Option<Value>>(idx).ok().flatten().unwrap_or(Value::Null)
         }
@@ -544,6 +715,47 @@ pub(crate) fn row_to_json_value(row: &tokio_postgres::Row, idx: usize, col_type:
             .map(Value::String)
             .unwrap_or(Value::Null),
     }
+}
+
+fn numeric_cell_to_value(row: &tokio_postgres::Row, idx: usize) -> Value {
+    if let Ok(Some(value)) = row.try_get::<_, Option<f64>>(idx) {
+        if let Some(number) = Number::from_f64(value) {
+            return Value::Number(number);
+        }
+    }
+
+    if let Ok(Some(text)) = row.try_get::<_, Option<String>>(idx) {
+        if let Ok(number) = Number::from_str(&text) {
+            return Value::Number(number);
+        }
+        return Value::String(text);
+    }
+
+    Value::Null
+}
+
+fn array_cell_to_value<T, F>(row: &tokio_postgres::Row, idx: usize, mapper: F) -> Value
+where
+    T: FromSqlOwned + Sync,
+    F: Fn(T) -> Option<Value> + Copy,
+{
+    if let Ok(Some(values)) = row.try_get::<_, Option<Vec<Option<T>>>>(idx) {
+        let mapped = values
+            .into_iter()
+            .map(|item| match item {
+                Some(value) => mapper(value).unwrap_or(Value::Null),
+                None => Value::Null,
+            })
+            .collect();
+        return Value::Array(mapped);
+    }
+
+    if let Ok(Some(values)) = row.try_get::<_, Option<Vec<T>>>(idx) {
+        let mapped = values.into_iter().map(|value| mapper(value).unwrap_or(Value::Null)).collect();
+        return Value::Array(mapped);
+    }
+
+    Value::Null
 }
 
 fn convert_params(params: &[Value], expected_types: &[Type]) -> Result<Vec<ConvertedParam>> {

@@ -8,6 +8,7 @@ use std::time::Duration;
 
 const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:11434";
 
+#[derive(Clone)]
 pub struct OllamaClient {
     endpoint: String,
     http: Client,
@@ -20,7 +21,8 @@ impl OllamaClient {
             .unwrap_or_else(|| DEFAULT_ENDPOINT.to_string());
 
         let http = Client::builder()
-            .timeout(Duration::from_secs(60))
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(300))
             .build()
             .expect("failed to build reqwest client");
 
@@ -125,7 +127,6 @@ impl OllamaClient {
         Ok(())
     }
 
-
     pub async fn embed(&self, model: &str, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
         if inputs.is_empty() {
             return Ok(Vec::new());
@@ -151,10 +152,35 @@ impl OllamaClient {
         Ok(payload.embeddings)
     }
 
-    pub async fn generate(&self, model: &str, prompt: &str, context: Option<&str>) -> Result<String> {
-        // Build the full prompt with context
+    pub async fn generate(
+        &self,
+        model: &str,
+        prompt: &str,
+        context: Option<&str>,
+    ) -> Result<String> {
+        self.generate_with_options(model, prompt, context, None).await
+    }
+
+    pub async fn generate_json(&self, model: &str, prompt: &str) -> Result<String> {
+        let request = GenerateRequest {
+            model: model.to_string(),
+            prompt: prompt.to_string(),
+            stream: false,
+            format: Some("json".to_string()),
+        };
+        self.send_generate(request).await
+    }
+
+    async fn generate_with_options(
+        &self,
+        model: &str,
+        prompt: &str,
+        context: Option<&str>,
+        format: Option<&str>,
+    ) -> Result<String> {
         let full_prompt = if let Some(ctx) = context {
-            format!(r#"You are a PostgreSQL SQL expert. Generate a SQL query to answer the user's question.
+            format!(
+                r#"You are a PostgreSQL SQL expert. Generate a SQL query to answer the user's question.
 
 Database Context:
 {}
@@ -170,9 +196,12 @@ Instructions:
 - Include relevant columns from multiple tables when showing relationships
 - Use proper PostgreSQL syntax including JSONB operators (->, ->>) when needed
 - Return ONLY the SQL query, no explanations or markdown formatting
-- Ensure the query is syntactically correct and can be executed directly"#, ctx, prompt)
+- Ensure the query is syntactically correct and can be executed directly"#,
+                ctx, prompt
+            )
         } else {
-            format!(r#"You are a PostgreSQL SQL expert. Generate a SQL query to answer the user's question.
+            format!(
+                r#"You are a PostgreSQL SQL expert. Generate a SQL query to answer the user's question.
 
 User Question: {}
 
@@ -180,13 +209,16 @@ Instructions:
 - Analyze the question to understand what data is being requested
 - If the question asks about relationships or connections between tables, use JOINs
 - Return ONLY the SQL query, no explanations or markdown formatting
-- Ensure the query is syntactically correct and can be executed directly"#, prompt)
+- Ensure the query is syntactically correct and can be executed directly"#,
+                prompt
+            )
         };
 
         let request = GenerateRequest {
             model: model.to_string(),
             prompt: full_prompt,
             stream: false,
+            format: format.map(|f| f.to_string()),
         };
 
         self.send_generate(request).await
@@ -197,6 +229,7 @@ Instructions:
             model: model.to_string(),
             prompt: prompt.to_string(),
             stream: false,
+            format: None,
         };
 
         self.send_generate(request).await
@@ -256,6 +289,8 @@ struct GenerateRequest {
     model: String,
     prompt: String,
     stream: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    format: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

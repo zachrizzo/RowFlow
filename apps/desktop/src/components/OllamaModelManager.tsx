@@ -195,10 +195,19 @@ export function OllamaModelManager({ open }: OllamaModelManagerProps) {
 
   const handleOpenModelsFolder = useCallback(async () => {
     if (!installInfo?.modelsDir) return;
-    
+
     try {
-      const { open } = await import('@tauri-apps/plugin-shell');
-      await open(installInfo.modelsDir);
+      const { Command } = await import('@tauri-apps/plugin-shell');
+
+      // Use platform-specific commands to open the folder
+      if (navigator.userAgent.includes('Mac')) {
+        await Command.create('open', [installInfo.modelsDir]).execute();
+      } else if (navigator.userAgent.includes('Win')) {
+        await Command.create('explorer', [installInfo.modelsDir]).execute();
+      } else {
+        // Linux
+        await Command.create('xdg-open', [installInfo.modelsDir]).execute();
+      }
     } catch (error) {
       toast({
         title: 'Failed to open folder',

@@ -19,6 +19,7 @@ import {
   Trash2,
   MinusCircle,
   Sparkles,
+  FlaskConical,
 } from 'lucide-react';
 import type { SchemaNode } from '@/types/schema';
 import { useToast } from '@/hooks/use-toast';
@@ -37,6 +38,7 @@ interface SchemaNodeContextMenuProps {
   onDropSchema?: (schema: string) => void;
   onRenameSchema?: (schema: string) => void;
   onEmbedTable?: (schema: string, table: string) => void;
+  onGenerateTestData?: (schema: string, table: string) => void;
 }
 
 export function SchemaNodeContextMenu({
@@ -53,6 +55,7 @@ export function SchemaNodeContextMenu({
   onDropSchema,
   onRenameSchema,
   onEmbedTable,
+  onGenerateTestData,
 }: SchemaNodeContextMenuProps) {
   const { toast } = useToast();
 
@@ -163,6 +166,12 @@ export function SchemaNodeContextMenu({
     }
   };
 
+  const handleGenerateTestData = () => {
+    if (node.schema && node.table && onGenerateTestData) {
+      onGenerateTestData(node.schema, node.table);
+    }
+  };
+
   // Determine which menu items to show based on node type
   const showTableActions = node.type === 'table' || node.type === 'view';
   const showColumnActions = node.type === 'column';
@@ -234,6 +243,11 @@ export function SchemaNodeContextMenu({
             <ContextMenuItem onClick={handleEmbedTable}>
               <Sparkles className="mr-2 h-4 w-4" />
               Embed Table for AI
+            </ContextMenuItem>
+
+            <ContextMenuItem onClick={handleGenerateTestData}>
+              <FlaskConical className="mr-2 h-4 w-4" />
+              Generate Test Data
             </ContextMenuItem>
 
             <ContextMenuSeparator />

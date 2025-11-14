@@ -171,13 +171,22 @@ export function McpInfoDialog({ open, onOpenChange }: McpInfoDialogProps) {
 
   const handleOpenFolder = async () => {
     try {
-      const { open } = await import('@tauri-apps/plugin-shell');
+      const { Command } = await import('@tauri-apps/plugin-shell');
       const serverPath = await getMcpServerPath();
-      await open(serverPath);
+
+      // Use platform-specific commands to open the folder
+      if (navigator.userAgent.includes('Mac')) {
+        await Command.create('open', [serverPath]).execute();
+      } else if (navigator.userAgent.includes('Win')) {
+        await Command.create('explorer', [serverPath]).execute();
+      } else {
+        // Linux
+        await Command.create('xdg-open', [serverPath]).execute();
+      }
     } catch (error) {
       toast({
         title: 'Failed to open folder',
-        description: 'Could not open MCP server folder',
+        description: error instanceof Error ? error.message : 'Could not open MCP server folder',
         variant: 'destructive',
       });
     }

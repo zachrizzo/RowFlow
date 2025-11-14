@@ -26,6 +26,46 @@ function makeTableId(schema: string, table: string) {
   return `${schema}.${table}`;
 }
 
+function buildForeignKeysFromColumns(
+  tableSchema: string,
+  tableName: string,
+  columns: Column[]
+): ForeignKey[] {
+  const grouped = new Map<string, ForeignKey>();
+
+  columns.forEach((column) => {
+    if (
+      !column.isForeignKey ||
+      !column.foreignKeyTable ||
+      !column.foreignKeyColumn
+    ) {
+      return;
+    }
+
+    const foreignSchema = column.foreignKeySchema || tableSchema;
+    const foreignTable = column.foreignKeyTable;
+    const constraintKey = `${foreignSchema}.${foreignTable}.${column.foreignKeyColumn}`;
+
+    if (!grouped.has(constraintKey)) {
+      grouped.set(constraintKey, {
+        name: `${tableName}_${foreignTable}_${column.foreignKeyColumn}_fk`,
+        columns: [],
+        foreignSchema,
+        foreignTable,
+        foreignColumns: [],
+        onDelete: 'NO ACTION',
+        onUpdate: 'NO ACTION',
+      });
+    }
+
+    const entry = grouped.get(constraintKey)!;
+    entry.columns.push(column.name);
+    entry.foreignColumns.push(column.foreignKeyColumn);
+  });
+
+  return Array.from(grouped.values());
+}
+
 // Helper to add timeout to promises
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
   return Promise.race([
@@ -127,8 +167,9 @@ export function useSchemaGraph({
           }
 
           const startTime = Date.now();
-          const [columnsResult, foreignKeysResult] = await Promise.allSettled([
-            withTimeout(
+          let columns: Column[] = [];
+          try {
+            columns = await withTimeout(
               invoke<Column[]>('get_table_columns', {
                 connectionId,
                 schema: table.schema,
@@ -136,42 +177,25 @@ export function useSchemaGraph({
               }),
               8000,
               `Timeout getting columns for ${table.schema}.${table.name}`
-            ),
-            withTimeout(
-              invoke<ForeignKey[]>('get_foreign_keys', {
-                connectionId,
-                schema: table.schema,
-                table: table.name,
-              }),
-              8000,
-              `Timeout getting foreign keys for ${table.schema}.${table.name}`
-            ),
-          ]);
+            );
+          } catch (error) {
+            console.error('[useSchemaGraph] Failed to get columns for', table.name, error);
+          }
           const elapsed = Date.now() - startTime;
           console.log(`[useSchemaGraph] Processed ${table.name} in ${elapsed}ms`);
 
-          if (columnsResult.status === 'rejected') {
-            console.error('[useSchemaGraph] Failed to get columns for', table.name, columnsResult.reason);
-          }
-          if (foreignKeysResult.status === 'rejected') {
-            console.error('[useSchemaGraph] Failed to get foreign keys for', table.name, foreignKeysResult.reason);
-          }
-
-          const foreignKeys = foreignKeysResult.status === 'fulfilled' ? foreignKeysResult.value : ([] as ForeignKey[]);
-
-          if (foreignKeys.length > 0) {
-            console.log(`[useSchemaGraph] Table ${table.name} has ${foreignKeys.length} foreign keys:`, foreignKeys);
-          }
+          const foreignKeys = buildForeignKeysFromColumns(
+            table.schema,
+            table.name,
+            columns
+          );
 
           return {
             id: makeTableId(table.schema, table.name),
             schema: table.schema,
             name: table.name,
             tableType: table.tableType,
-            columns:
-              columnsResult.status === 'fulfilled'
-                ? columnsResult.value
-                : ([] as Column[]),
+            columns,
             foreignKeys,
             isExternal: false,
           } satisfies SchemaGraphNode;

@@ -84,3 +84,21 @@ export interface AgentState {
   sql?: string;
   shouldSearch: boolean;
 }
+
+export interface GenerateTestDataRequest {
+  connectionId: string;
+  schema: string;
+  table: string;
+  rowCount: number;
+  instructions?: string;
+  userTemplate?: Record<string, any> | any[];
+}
+
+export interface GeneratedTestRow {
+  values: Record<string, any>;
+}
+
+export interface GenerateTestDataResponse {
+  rows: GeneratedTestRow[];
+  model: string;
+}

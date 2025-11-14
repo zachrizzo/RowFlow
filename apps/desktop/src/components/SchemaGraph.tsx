@@ -249,28 +249,32 @@ export function SchemaGraph({
 
     // Create edges with specific source/target handles for column-to-column connections
     const flowEdges: FlowEdge[] = edges.flatMap((edge) => {
-      // Create an edge for each column pair in the foreign key
-      return edge.columns.map((sourceCol, index) => {
-        const targetCol = edge.foreignColumns[index];
-        const sourceHandleId = `${edge.source}-${sourceCol}`;
-        const targetHandleId = `${edge.target}-${targetCol}`;
+      // Pair up source/target columns and filter to valid mappings
+      const columnPairs = edge.columns
+        .map((sourceCol, index) => {
+          const targetCol = edge.foreignColumns[index];
+          return { sourceCol, targetCol };
+        })
+        .filter(
+          (pair): pair is { sourceCol: string; targetCol: string } =>
+            Boolean(pair.sourceCol && pair.targetCol)
+        );
 
-        return {
-          id: `${edge.id}-${index}`,
-          source: edge.source,
-          target: edge.target,
-          sourceHandle: sourceHandleId,
-          targetHandle: targetHandleId,
-          label: index === 0 ? `${edge.name}` : undefined,
-          labelBgPadding: [6, 2] as [number, number],
-          labelStyle: { fontSize: 10, fontWeight: 500 },
-          animated: false,
-          style: {
-            stroke: index === 0 ? '#3b82f6' : '#94a3b8',
-            strokeWidth: index === 0 ? 2 : 1,
-          },
-        };
-      });
+      return columnPairs.map((pair, pairIndex) => ({
+        id: `${edge.id}-${pairIndex}`,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: `${edge.source}-${pair.sourceCol}`,
+        targetHandle: `${edge.target}-${pair.targetCol}`,
+        label: pairIndex === 0 ? `${edge.name}` : undefined,
+        labelBgPadding: [6, 2] as [number, number],
+        labelStyle: { fontSize: 10, fontWeight: 500 },
+        animated: false,
+        style: {
+          stroke: pairIndex === 0 ? '#3b82f6' : '#94a3b8',
+          strokeWidth: pairIndex === 0 ? 2 : 1,
+        },
+      }));
     });
 
     return layoutGraph(flowNodes, flowEdges);

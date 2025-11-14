@@ -259,6 +259,33 @@ pub struct EmbeddingJobResult {
     pub skipped_rows: usize,
 }
 
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateTestDataRequest {
+    pub connection_id: String,
+    pub schema: String,
+    pub table: String,
+    pub row_count: usize,
+    pub instructions: Option<String>,
+    pub user_template: Option<serde_json::Value>,
+}
+
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratedTestRow {
+    pub values: serde_json::Value,
+}
+
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerateTestDataResponse {
+    pub rows: Vec<GeneratedTestRow>,
+    pub model: String,
+}
+
 /// Request to perform semantic search against stored embeddings
 #[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize)]

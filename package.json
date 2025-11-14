@@ -6,12 +6,14 @@
   "description": "Modern PostgreSQL viewer with MCP support",
   "scripts": {
     "dev": "lsof -ti:1420 | xargs kill -9 2>/dev/null || true && pnpm build:mcp && pnpm --filter @rowflow/desktop tauri dev",
+    "dev:website": "pnpm --filter @rowflow/website dev",
     "build": "pnpm build:mcp && pnpm build:desktop",
     "build:mcp": "pnpm --filter @rowflow/mcp-server build",
     "build:types": "cd packages/rust-shared && typeshare . --lang=typescript --output-file=../shared/src/generated.ts",
     "build:rust": "cargo build --release",
     "build:ts": "pnpm -r --filter='./packages/*' build",
     "build:desktop": "pnpm --filter @rowflow/desktop tauri build",
+    "build:website": "pnpm --filter @rowflow/website build",
     "lint": "pnpm lint:ts && pnpm lint:rust",
     "lint:ts": "eslint .",
     "lint:rust": "cargo clippy --all-targets --all-features -- -D warnings",
@@ -31,6 +33,12 @@
     "eslint-plugin-react-hooks": "^5.1.0",
     "prettier": "^3.4.2",
     "typescript": "^5.6.3"
+  },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "18.3.26",
+      "@types/react-dom": "18.3.7"
+    }
   },
   "packageManager": "pnpm@9.15.0",
   "engines": {

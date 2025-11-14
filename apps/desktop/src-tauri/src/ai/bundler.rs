@@ -55,10 +55,7 @@ pub struct OllamaBundler {
 
 impl OllamaBundler {
     pub fn new(app_data_dir: PathBuf, resources_dir: PathBuf) -> Self {
-        Self {
-            app_data_dir,
-            resources_dir,
-        }
+        Self { app_data_dir, resources_dir }
     }
 
     /// Get information about the bundled Ollama binary for current platform
@@ -66,20 +63,12 @@ impl OllamaBundler {
         let platform = Platform::current();
         let binary_name = platform.binary_name().to_string();
 
-        let bundled_path = self
-            .resources_dir
-            .join("ollama")
-            .join(platform.bundled_subdir())
-            .join(&binary_name);
+        let bundled_path =
+            self.resources_dir.join("ollama").join(platform.bundled_subdir()).join(&binary_name);
 
         let install_path = self.app_data_dir.join("bin").join(&binary_name);
 
-        OllamaBundleInfo {
-            platform,
-            binary_name,
-            bundled_path,
-            install_path,
-        }
+        OllamaBundleInfo { platform, binary_name, bundled_path, install_path }
     }
 
     /// Check if Ollama is installed in the app data directory
@@ -221,10 +210,7 @@ pub fn detect_system_ollama() -> Option<PathBuf> {
     } else if cfg!(target_os = "linux") {
         vec!["/usr/local/bin/ollama", "/usr/bin/ollama", "/snap/bin/ollama"]
     } else if cfg!(target_os = "windows") {
-        vec![
-            r"C:\Program Files\Ollama\ollama.exe",
-            r"C:\Program Files (x86)\Ollama\ollama.exe",
-        ]
+        vec![r"C:\Program Files\Ollama\ollama.exe", r"C:\Program Files (x86)\Ollama\ollama.exe"]
     } else {
         vec![]
     };
