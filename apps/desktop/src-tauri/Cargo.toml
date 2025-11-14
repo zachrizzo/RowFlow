@@ -57,6 +57,13 @@ futures-util = "0.3"
 bytes = "1.5"
 which = "6.0"
 
+# S3 support
+aws-sdk-s3 = "1.72"
+aws-config = "1.5"
+aws-credential-types = "1.2"
+aws-smithy-types = "1.2"
+base64 = "0.22"
+
 # Unix process management
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.29", features = ["signal"] }

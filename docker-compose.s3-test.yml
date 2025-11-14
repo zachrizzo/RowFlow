@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: rowflow-minio-test
+    ports:
+      - "9000:9000"      # API port
+      - "9001:9001"      # Web Console port
+    environment:
+      MINIO_ROOT_USER: rowflow
+      MINIO_ROOT_PASSWORD: rowflow123
+      MINIO_DOMAIN: localhost
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # Initialize bucket and upload sample files
+  minio-init:
+    image: minio/mc:latest
+    container_name: rowflow-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set myminio http://minio:9000 rowflow rowflow123;
+      mc mb myminio/test-bucket --ignore-existing;
+      mc mb myminio/test-bucket/images --ignore-existing;
+      mc mb myminio/test-bucket/documents --ignore-existing;
+      mc mb myminio/test-bucket/videos --ignore-existing;
+      mc mb myminio/test-bucket/data --ignore-existing;
+      echo 'MinIO test bucket created successfully!';
+      echo 'Access the MinIO console at: http://localhost:9001';
+      echo 'Username: rowflow';
+      echo 'Password: rowflow123';
+      "
+
+volumes:
+  minio-data:
+    driver: local

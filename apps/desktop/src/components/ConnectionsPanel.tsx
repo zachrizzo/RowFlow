@@ -8,14 +8,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { ConnectionList } from '@/components/ConnectionList';
-import { ConnectionForm } from '@/components/ConnectionForm';
+import { ConnectionDialog } from '@/components/ConnectionDialog';
+import { S3Browser } from '@/components/S3Browser';
 import { useDatabase } from '@/hooks/useDatabase';
+import { useS3Profiles } from '@/hooks/useS3Profiles';
 import type { StoredProfile } from '@/types/connection';
+import type { StoredS3Profile } from '@/types/s3';
 
 export function ConnectionsPanel() {
-  const { getActiveConnection } = useDatabase();
+  const { getActiveConnection, loadProfiles } = useDatabase();
+  const { refreshProfiles } = useS3Profiles();
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingProfile, setEditingProfile] = useState<StoredProfile | undefined>();
+  const [editingProfile, setEditingProfile] = useState<StoredProfile | StoredS3Profile | undefined>();
+  const [s3BrowserProfile, setS3BrowserProfile] = useState<StoredS3Profile | null>(null);
 
   const activeConnection = getActiveConnection();
 
@@ -24,19 +29,21 @@ export function ConnectionsPanel() {
     setIsFormOpen(true);
   };
 
-  const handleEditProfile = (profile: StoredProfile) => {
+  const handleEditProfile = (profile: StoredProfile | StoredS3Profile) => {
     setEditingProfile(profile);
     setIsFormOpen(true);
   };
 
-  const handleFormSuccess = () => {
+  const handleFormSuccess = async () => {
     setIsFormOpen(false);
     setEditingProfile(undefined);
+    // Refresh both PostgreSQL and S3 profiles to ensure the list updates
+    await loadProfiles();
+    refreshProfiles();
   };
 
-  const handleFormCancel = () => {
-    setIsFormOpen(false);
-    setEditingProfile(undefined);
+  const handleOpenS3Browser = (profile: StoredS3Profile) => {
+    setS3BrowserProfile(profile);
   };
 
   return (
@@ -76,25 +83,32 @@ export function ConnectionsPanel() {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-4">
-          <ConnectionList onEditProfile={handleEditProfile} />
+          <ConnectionList
+            onEditProfile={handleEditProfile}
+            onOpenS3Browser={handleOpenS3Browser}
+          />
         </div>
       </div>
 
-      {/* Connection Form Dialog */}
-      <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingProfile ? 'Edit Connection' : 'New Connection'}
-            </DialogTitle>
-          </DialogHeader>
-          <ConnectionForm
-            profile={editingProfile}
-            onSuccess={handleFormSuccess}
-            onCancel={handleFormCancel}
-          />
-        </DialogContent>
-      </Dialog>
+      {/* Connection Dialog - Unified for both PostgreSQL and S3 */}
+      <ConnectionDialog
+        open={isFormOpen}
+        onOpenChange={setIsFormOpen}
+        onSuccess={handleFormSuccess}
+        editingProfile={editingProfile}
+      />
+
+      {/* S3 Browser Dialog */}
+      {s3BrowserProfile && (
+        <Dialog open={!!s3BrowserProfile} onOpenChange={(open) => !open && setS3BrowserProfile(null)}>
+          <DialogContent className="max-w-6xl h-[80vh] p-0 flex flex-col">
+            <S3Browser 
+              profile={s3BrowserProfile} 
+              onClose={() => setS3BrowserProfile(null)}
+            />
+          </DialogContent>
+        </Dialog>
+      )}
     </>
   );
 }

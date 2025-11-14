@@ -77,6 +77,15 @@ fn main() {
             rowflow_lib::commands::schema::drop_table,
             rowflow_lib::commands::schema::add_table_column,
             rowflow_lib::commands::schema::drop_table_column,
+            // S3 commands
+            rowflow_lib::commands::s3::connect_s3,
+            rowflow_lib::commands::s3::disconnect_s3,
+            rowflow_lib::commands::s3::test_s3_connection,
+            rowflow_lib::commands::s3::list_s3_objects,
+            rowflow_lib::commands::s3::get_s3_object,
+            rowflow_lib::commands::s3::put_s3_object,
+            rowflow_lib::commands::s3::delete_s3_objects,
+            rowflow_lib::commands::s3::get_s3_presigned_url,
             // AI + embeddings
             rowflow_lib::commands::ai::check_ollama_status,
             rowflow_lib::commands::ai::get_ollama_install_info,

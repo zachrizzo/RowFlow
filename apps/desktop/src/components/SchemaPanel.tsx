@@ -1767,9 +1767,14 @@ export function SchemaPanel({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
+                  type="button"
                   variant="ghost"
                   size="icon"
-                  onClick={handleNormal}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleNormal();
+                  }}
                   className="h-8 w-8"
                 >
                   <ChevronRight className="h-4 w-4" />
@@ -1801,9 +1806,14 @@ export function SchemaPanel({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
+                    type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={handleMinimize}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleMinimize();
+                    }}
                     className="h-8 w-8"
                   >
                     <Minimize2 className="h-4 w-4" />
@@ -1854,9 +1864,14 @@ export function SchemaPanel({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
+                    type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={handleMinimize}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleMinimize();
+                    }}
                     className="h-8 w-8"
                   >
                     <Minimize2 className="h-4 w-4" />
@@ -1871,9 +1886,18 @@ export function SchemaPanel({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
+                    type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={panelSize === 'expanded' ? handleNormal : handleExpand}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (panelSize === 'expanded') {
+                        handleNormal();
+                      } else {
+                        handleExpand();
+                      }
+                    }}
                     className="h-8 w-8"
                   >
                     {panelSize === 'expanded' ? (
@@ -1969,6 +1993,7 @@ export function SchemaPanel({
                 connectionId={activeConnection?.connectionId || null}
                 schemas={schemaNames}
                 defaultSchema={selectedTable?.schema ?? schemaNames[0] ?? null}
+                onOpenTable={onTableSelect}
               />
             </div>
           </TabsContent>

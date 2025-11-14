@@ -1,5 +1,6 @@
 use crate::error::{Result, RowFlowError};
-use crate::types::ConnectionProfile;
+use crate::types::{ConnectionProfile, S3ConnectionProfile};
+use aws_sdk_s3::Client as S3Client;
 use deadpool_postgres::{Manager, ManagerConfig, Object, Pool, RecyclingMethod};
 use postgres_native_tls::MakeTlsConnector;
 use std::collections::HashMap;
@@ -8,14 +9,18 @@ use tokio::sync::Mutex;
 use tokio_postgres::NoTls;
 use uuid::Uuid;
 
-/// Application state managing database connections
+/// Application state managing database and S3 connections
 pub struct AppState {
     connections: Arc<Mutex<HashMap<String, ConnectionPool>>>,
+    s3_connections: Arc<Mutex<HashMap<String, S3ConnectionPool>>>,
 }
 
 impl AppState {
     pub fn new() -> Self {
-        Self { connections: Arc::new(Mutex::new(HashMap::new())) }
+        Self {
+            connections: Arc::new(Mutex::new(HashMap::new())),
+            s3_connections: Arc::new(Mutex::new(HashMap::new())),
+        }
     }
 
     /// Create a new database connection pool
@@ -199,4 +204,53 @@ impl Default for AppState {
 struct ConnectionPool {
     pool: Pool,
     profile: ConnectionProfile,
+}
+
+/// Wrapper for an S3 client with its profile
+struct S3ConnectionPool {
+    client: S3Client,
+    profile: S3ConnectionProfile,
+}
+
+impl AppState {
+    /// Create a new S3 connection
+    pub async fn create_s3_connection(
+        &self,
+        profile: S3ConnectionProfile,
+        client: S3Client,
+    ) -> Result<String> {
+        let connection_id = Uuid::new_v4().to_string();
+
+        let mut connections = self.s3_connections.lock().await;
+        connections.insert(connection_id.clone(), S3ConnectionPool { client, profile });
+
+        Ok(connection_id)
+    }
+
+    /// Get an existing S3 client
+    pub async fn get_s3_client(
+        &self,
+        connection_id: &str,
+    ) -> Result<(S3Client, S3ConnectionProfile)> {
+        let connections = self.s3_connections.lock().await;
+        connections
+            .get(connection_id)
+            .map(|cp| (cp.client.clone(), cp.profile.clone()))
+            .ok_or_else(|| RowFlowError::ConnectionNotFound(connection_id.to_string()))
+    }
+
+    /// Remove an S3 connection
+    pub async fn remove_s3_connection(&self, connection_id: &str) -> Result<()> {
+        let mut connections = self.s3_connections.lock().await;
+        connections
+            .remove(connection_id)
+            .ok_or_else(|| RowFlowError::ConnectionNotFound(connection_id.to_string()))?;
+        Ok(())
+    }
+
+    /// List all active S3 connection IDs
+    pub async fn list_s3_connections(&self) -> Vec<String> {
+        let connections = self.s3_connections.lock().await;
+        connections.keys().cloned().collect()
+    }
 }

@@ -670,7 +670,10 @@ async fn fetch_unique_column_samples(
     Ok(samples)
 }
 
-fn build_unique_constraints_prompt(columns: &[Column], samples: &UniqueColumnSamples) -> Option<String> {
+fn build_unique_constraints_prompt(
+    columns: &[Column],
+    samples: &UniqueColumnSamples,
+) -> Option<String> {
     let mut lines = Vec::new();
     for column in columns {
         if !column.is_unique && !column.is_primary_key {
@@ -690,7 +693,11 @@ fn build_unique_constraints_prompt(columns: &[Column], samples: &UniqueColumnSam
         lines.push(line);
     }
 
-    if lines.is_empty() { None } else { Some(lines.join("\n")) }
+    if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n"))
+    }
 }
 
 fn enforce_unique_constraints(
@@ -1134,9 +1141,25 @@ pub async fn generate_test_data(
     let ollama_status = ollama_client.status().await?;
 
     if !ollama_status.available {
-        return Err(RowFlowError::OllamaError(
-            "Ollama is not running. Please start Ollama in Settings > AI Models.".to_string(),
-        ));
+        // Check if Ollama is installed
+        let install_info = {
+            let state = embedding_state.lock().await;
+            let bundler = state.bundler();
+            let system_path = crate::ai::detect_system_ollama();
+            (bundler.is_installed(), bundler.is_bundled(), system_path.is_some())
+        };
+
+        let error_msg = if !install_info.0 && !install_info.2 {
+            if install_info.1 {
+                "Ollama is not installed. Please install it in Settings > AI Models.".to_string()
+            } else {
+                "Ollama is not installed and no bundled version is available. Please install Ollama to use AI features.".to_string()
+            }
+        } else {
+            "Ollama is not running. Please start Ollama in Settings > AI Models.".to_string()
+        };
+
+        return Err(RowFlowError::OllamaError(error_msg));
     }
 
     let model_available = ollama_status.models.iter().any(|m| {
@@ -1145,10 +1168,34 @@ pub async fn generate_test_data(
     });
 
     if !model_available {
-        return Err(RowFlowError::OllamaError(format!(
-            "Model '{}' is not installed. Please install it in Settings > AI Models.",
-            model
-        )));
+        // Check if Ollama is installed
+        let install_info = {
+            let state = embedding_state.lock().await;
+            let bundler = state.bundler();
+            let system_path = crate::ai::detect_system_ollama();
+            (bundler.is_installed(), bundler.is_bundled(), system_path.is_some())
+        };
+
+        let error_msg = if !install_info.0 && !install_info.2 {
+            if install_info.1 {
+                format!(
+                    "Model '{}' is not installed. Ollama is also not installed. Please install Ollama first, then install the model in Settings > AI Models.",
+                    model
+                )
+            } else {
+                format!(
+                    "Model '{}' is not installed. Ollama is not installed and no bundled version is available. Please install Ollama to use AI features.",
+                    model
+                )
+            }
+        } else {
+            format!(
+                "Model '{}' is not installed. Please install it in Settings > AI Models.",
+                model
+            )
+        };
+
+        return Err(RowFlowError::OllamaError(error_msg));
     }
 
     log::info!("[generate_test_data] Using model: {}", model);

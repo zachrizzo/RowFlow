@@ -16,15 +16,9 @@ import { useCommandPalette } from '@/hooks/useCommandPalette';
 import { Toaster } from '@/components/ui/toaster';
 import { Settings } from '@/components/Settings';
 import { Header } from '@/components/Header';
-import { ConnectionForm } from '@/components/ConnectionForm';
+import { ConnectionDialog } from '@/components/ConnectionDialog';
 import { AiChat } from '@/components/AiChat';
 import type { EmbeddingSearchMatch } from '@/types/ai';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { useTheme } from '@/hooks/useTheme';
 import type { StoredProfile } from '@/types/connection';
 import { generateSelectQuery } from '@/lib/sqlPlaceholders';
@@ -160,10 +154,6 @@ function AppContent() {
     setConnectionsSidebarOpen(true);
   };
 
-  const handleConnectionFormCancel = () => {
-    setIsConnectionFormOpen(false);
-    setEditingProfile(undefined);
-  };
 
   return (
     <>
@@ -192,14 +182,6 @@ function AppContent() {
           <div
             className="fixed inset-0 bg-black/20 z-30 top-12"
             onClick={() => setConnectionsSidebarOpen(false)}
-          />
-        )}
-
-        {/* Overlay when schema panel is expanded */}
-        {schemaPanelSize === 'expanded' && (
-          <div
-            className="fixed inset-0 bg-black/10 z-20 top-12"
-            onClick={() => handleSchemaPanelSizeChange('normal')}
           />
         )}
 
@@ -358,23 +340,15 @@ function AppContent() {
       </div>
       <CommandPalette onOpenSettings={() => setSettingsOpen(true)} />
       <Settings open={settingsOpen} onOpenChange={setSettingsOpen} />
-      
-      {/* Connection Form Dialog */}
-      <Dialog open={isConnectionFormOpen} onOpenChange={setIsConnectionFormOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {editingProfile ? 'Edit Connection' : 'New Connection'}
-            </DialogTitle>
-          </DialogHeader>
-          <ConnectionForm
-            profile={editingProfile}
-            onSuccess={handleConnectionFormSuccess}
-            onCancel={handleConnectionFormCancel}
-          />
-        </DialogContent>
-      </Dialog>
-      
+
+      {/* Connection Dialog - Supports both PostgreSQL and S3 */}
+      <ConnectionDialog
+        open={isConnectionFormOpen}
+        onOpenChange={setIsConnectionFormOpen}
+        onSuccess={handleConnectionFormSuccess}
+        editingProfile={editingProfile}
+      />
+
       <Toaster />
     </>
   );

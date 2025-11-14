@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   Database,
+  Cloud,
   MoreVertical,
   Trash2,
   Edit,
@@ -29,14 +30,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useDatabase } from '@/hooks/useDatabase';
+import { useS3Profiles } from '@/hooks/useS3Profiles';
 import type { ConnectionProfile, StoredProfile } from '@/types/connection';
+import type { StoredS3Profile } from '@/types/s3';
 import { cn } from '@/lib/utils';
 
 interface ConnectionListProps {
-  onEditProfile?: (profile: StoredProfile) => void;
+  onEditProfile?: (profile: StoredProfile | StoredS3Profile) => void;
+  onOpenS3Browser?: (profile: StoredS3Profile) => void;
 }
 
-export function ConnectionList({ onEditProfile }: ConnectionListProps) {
+export function ConnectionList({ onEditProfile, onOpenS3Browser }: ConnectionListProps) {
   const {
     profiles,
     connections,
@@ -46,6 +50,11 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
     deleteProfile,
     getConnectionStatus,
   } = useDatabase();
+
+  const {
+    profiles: s3Profiles,
+    deleteProfile: deleteS3Profile,
+  } = useS3Profiles();
 
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [connectingProfileId, setConnectingProfileId] = useState<string | null>(null);
@@ -71,12 +80,20 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
 
   const handleDeleteConfirm = async () => {
     if (deletingProfileId) {
-      await deleteProfile(deletingProfileId);
+      // Check if it's a PostgreSQL or S3 profile
+      const isS3 = s3Profiles.some(p => p.id === deletingProfileId);
+      if (isS3) {
+        deleteS3Profile(deletingProfileId);
+      } else {
+        await deleteProfile(deletingProfileId);
+      }
       setDeletingProfileId(null);
     }
   };
 
-  if (profiles.length === 0) {
+  const totalProfiles = profiles.length + s3Profiles.length;
+
+  if (totalProfiles === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground py-8">
         <Database className="h-12 w-12 mb-4 opacity-20" />
@@ -89,6 +106,7 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
   return (
     <>
       <div className="space-y-2">
+        {/* PostgreSQL Connections */}
         {profiles.map((profile) => {
           const status = getConnectionStatus(profile.id);
           const isActive = activeConnectionId === profile.id;
@@ -250,6 +268,88 @@ export function ConnectionList({ onEditProfile }: ConnectionListProps) {
             </div>
           );
         })}
+
+        {/* S3 Connections */}
+        {s3Profiles.map((profile) => (
+          <div
+            key={profile.id}
+            className="group relative rounded-lg border p-3 transition-colors hover:bg-accent"
+          >
+            <div className="flex items-start gap-3">
+              {/* Icon */}
+              <div className="pt-1">
+                <Cloud className="h-4 w-4 text-muted-foreground" />
+              </div>
+
+              {/* Profile Info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-medium text-sm truncate">
+                      {profile.name}
+                    </h3>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {profile.bucket} ({profile.region})
+                    </p>
+
+                    {/* Additional Info */}
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs px-1.5 py-0.5 bg-blue-500/10 text-blue-500 rounded">
+                        S3
+                      </span>
+                      {profile.endpoint && (
+                        <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
+                          Custom
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions Dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={() => onEditProfile?.(profile)}
+                      >
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setDeletingProfileId(profile.id)}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            </div>
+
+            {/* Browse Button */}
+            <div className="mt-2 pt-2 border-t">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => onOpenS3Browser?.(profile)}
+              >
+                <Cloud className="mr-2 h-3 w-3" />
+                Browse Bucket
+              </Button>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Delete Confirmation Dialog */}

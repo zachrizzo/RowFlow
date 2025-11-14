@@ -1,0 +1,12 @@
+{
+  "name": "MinIO Test",
+  "endpoint": "http://localhost:9000",
+  "region": "us-east-1",
+  "bucket": "test-bucket",
+  "accessKeyId": "rowflow",
+  "secretAccessKey": "rowflow123",
+  "forcePathStyle": true,
+  "sessionToken": null,
+  "pathPrefix": null
+}
+

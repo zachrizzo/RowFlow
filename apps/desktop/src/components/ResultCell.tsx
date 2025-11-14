@@ -1,15 +1,34 @@
-import { Check, X, Braces, List } from 'lucide-react';
+import { Check, X, Braces, List, ExternalLink } from 'lucide-react';
 import { formatCellValue, getValueType, copyCellToClipboard } from '@/lib/export';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 
 export interface ResultCellProps {
   value: unknown;
+  onS3UrlClick?: (url: string) => void;
 }
 
-export function ResultCell({ value }: ResultCellProps) {
+// Detect if a string is an S3 URL
+function isS3Url(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+
+  // Match s3:// URLs
+  if (value.startsWith('s3://')) return true;
+
+  // Match https://bucket.s3.region.amazonaws.com/key
+  if (/^https?:\/\/[\w.-]+\.s3[\w.-]*\.amazonaws\.com\//i.test(value)) return true;
+
+  // Match https://s3.region.amazonaws.com/bucket/key
+  if (/^https?:\/\/s3[\w.-]*\.amazonaws\.com\/[\w.-]+\//i.test(value)) return true;
+
+  return false;
+}
+
+export function ResultCell({ value, onS3UrlClick }: ResultCellProps) {
   const { toast } = useToast();
   const valueType = getValueType(value);
+  const isS3Link = isS3Url(value);
 
   const handleClick = async (event: React.MouseEvent) => {
     event.stopPropagation();
@@ -82,6 +101,29 @@ export function ResultCell({ value }: ResultCellProps) {
 
       case 'string':
       default:
+        // Check if it's an S3 URL
+        if (isS3Link && onS3UrlClick) {
+          return (
+            <div className="flex items-center gap-2 w-full">
+              <span className="text-xs truncate flex-1 text-blue-500" title={String(value)}>
+                {formatCellValue(value)}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 flex-shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onS3UrlClick(String(value));
+                }}
+                title="Open in S3 Browser"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+          );
+        }
+
         return (
           <span className="text-xs truncate" title={String(value)}>
             {formatCellValue(value)}

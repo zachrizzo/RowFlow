@@ -482,3 +482,141 @@ pub struct ForeignKeySearchResult {
     pub key: String,
     pub row: serde_json::Value,
 }
+
+/// S3 connection profile
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3ConnectionProfile {
+    pub id: Option<String>,
+    pub name: String,
+    pub endpoint: Option<String>, // Optional custom endpoint (e.g., MinIO, R2)
+    pub region: String,
+    pub bucket: String,
+    pub access_key_id: String,
+    pub secret_access_key: String,
+    pub session_token: Option<String>, // For temporary credentials
+    pub path_prefix: Option<String>,   // Optional path prefix
+    pub force_path_style: bool,        // For S3-compatible services
+}
+
+/// S3 object metadata
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3Object {
+    pub key: String,
+    pub size: i64,
+    pub last_modified: String,
+    pub etag: String,
+    pub content_type: Option<String>,
+    pub storage_class: Option<String>,
+    pub is_directory: bool,
+}
+
+/// S3 list objects result
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3ListResult {
+    pub objects: Vec<S3Object>,
+    pub common_prefixes: Vec<String>, // Directories
+    pub is_truncated: bool,
+    pub continuation_token: Option<String>,
+}
+
+/// Request to list S3 objects
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3ListRequest {
+    pub prefix: Option<String>,
+    pub delimiter: Option<String>,
+    pub max_keys: Option<i32>,
+    pub continuation_token: Option<String>,
+}
+
+/// Request to download an S3 object
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3GetObjectRequest {
+    pub key: String,
+}
+
+/// Response containing S3 object data
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3GetObjectResponse {
+    pub content: Vec<u8>,
+    pub content_type: Option<String>,
+    pub content_length: i64,
+    pub last_modified: Option<String>,
+    pub etag: Option<String>,
+}
+
+/// Request to upload an S3 object
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3PutObjectRequest {
+    pub key: String,
+    pub content: Vec<u8>,
+    pub content_type: Option<String>,
+}
+
+/// Request to delete S3 objects
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3DeleteObjectsRequest {
+    pub keys: Vec<String>,
+}
+
+/// Result of S3 delete operation
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3DeleteResult {
+    pub deleted: Vec<String>,
+    pub errors: Vec<S3DeleteError>,
+}
+
+/// S3 delete error
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3DeleteError {
+    pub key: String,
+    pub code: String,
+    pub message: String,
+}
+
+/// Request to generate presigned URL
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3PresignedUrlRequest {
+    pub key: String,
+    pub expires_in: u64, // seconds
+}
+
+/// Response containing presigned URL
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3PresignedUrlResponse {
+    pub url: String,
+    pub expires_at: String,
+}
+
+/// S3 bucket information
+#[typeshare]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct S3BucketInfo {
+    pub name: String,
+    pub creation_date: Option<String>,
+    pub region: String,
+}

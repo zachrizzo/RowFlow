@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import type { OllamaStatus } from '@/types/ai';
+import type { OllamaStatus, OllamaInstallInfo } from '@/types/ai';
 import * as React from 'react';
 import { ToastAction } from '@/components/ui/toast';
 
@@ -80,9 +80,28 @@ export async function checkAndPromptForMissingModels(
     const ollamaStatus = await invoke<OllamaStatus>('check_ollama_status');
     
     if (!ollamaStatus.available) {
+      // Check if Ollama is installed
+      let installInfo: OllamaInstallInfo | null = null;
+      try {
+        installInfo = await invoke<OllamaInstallInfo>('get_ollama_install_info');
+      } catch (error) {
+        console.error('Failed to get Ollama install info:', error);
+      }
+
+      const isOllamaInstalled = installInfo?.isInstalled || installInfo?.systemOllamaAvailable || false;
+      
+      let description = 'Please start Ollama in Settings > AI Models to use AI features.';
+      if (!isOllamaInstalled) {
+        if (installInfo?.isBundled) {
+          description = 'Ollama is not installed. Please install it in Settings > AI Models.';
+        } else {
+          description = 'Ollama is not installed and no bundled version is available. Please install Ollama to use AI features.';
+        }
+      }
+
       toast({
         title: 'Ollama Not Running',
-        description: 'Please start Ollama in Settings > AI Models to use AI features.',
+        description,
         variant: 'destructive',
         action: createSettingsAction(onOpenSettings),
       });
@@ -100,10 +119,30 @@ export async function checkAndPromptForMissingModels(
     }
 
     if (missingModels.length > 0) {
+      // Check if Ollama is installed
+      let installInfo: OllamaInstallInfo | null = null;
+      try {
+        installInfo = await invoke<OllamaInstallInfo>('get_ollama_install_info');
+      } catch (error) {
+        console.error('Failed to get Ollama install info:', error);
+      }
+
+      const isOllamaInstalled = installInfo?.isInstalled || installInfo?.systemOllamaAvailable || false;
+      
       const modelList = missingModels.join('\n');
+      let description = `The following models are required but not installed:\n${modelList}\n\nPlease install them in Settings > AI Models.`;
+      
+      if (!isOllamaInstalled) {
+        if (installInfo?.isBundled) {
+          description = `The following models are required but not installed:\n${modelList}\n\nOllama is also not installed. Please install Ollama first, then install the models in Settings > AI Models.`;
+        } else {
+          description = `The following models are required but not installed:\n${modelList}\n\nOllama is not installed and no bundled version is available. Please install Ollama to use AI features.`;
+        }
+      }
+
       toast({
         title: 'Missing AI Models',
-        description: `The following models are required but not installed:\n${modelList}\n\nPlease install them in Settings > AI Models.`,
+        description,
         variant: 'destructive',
         action: createSettingsAction(onOpenSettings),
       });
@@ -138,9 +177,28 @@ export async function checkBothModels(
     
     if (!ollamaStatus.available) {
       if (showToast) {
+        // Check if Ollama is installed
+        let installInfo: OllamaInstallInfo | null = null;
+        try {
+          installInfo = await invoke<OllamaInstallInfo>('get_ollama_install_info');
+        } catch (error) {
+          console.error('Failed to get Ollama install info:', error);
+        }
+
+        const isOllamaInstalled = installInfo?.isInstalled || installInfo?.systemOllamaAvailable || false;
+
+        let description = 'Please start Ollama in Settings > AI Models to use AI features.';
+        if (!isOllamaInstalled) {
+          if (installInfo?.isBundled) {
+            description = 'Ollama is not installed. Please install it in Settings > AI Models.';
+          } else {
+            description = 'Ollama is not installed and no bundled version is available. Please install Ollama to use AI features.';
+          }
+        }
+
         toast({
           title: 'Ollama Not Running',
-          description: 'Please start Ollama in Settings > AI Models to use AI features.',
+          description,
           variant: 'destructive',
           action: createSettingsAction(onOpenSettings),
         });
@@ -163,10 +221,30 @@ export async function checkBothModels(
     }
 
     if (missingModels.length > 0 && showToast) {
+      // Check if Ollama is installed
+      let installInfo: OllamaInstallInfo | null = null;
+      try {
+        installInfo = await invoke<OllamaInstallInfo>('get_ollama_install_info');
+      } catch (error) {
+        console.error('Failed to get Ollama install info:', error);
+      }
+
+      const isOllamaInstalled = installInfo?.isInstalled || installInfo?.systemOllamaAvailable || false;
+      
       const modelList = missingModels.join('\n');
+      let description = `The following models are required but not installed:\n${modelList}\n\nPlease install them in Settings > AI Models.`;
+      
+      if (!isOllamaInstalled) {
+        if (installInfo?.isBundled) {
+          description = `The following models are required but not installed:\n${modelList}\n\nOllama is also not installed. Please install Ollama first, then install the models in Settings > AI Models.`;
+        } else {
+          description = `The following models are required but not installed:\n${modelList}\n\nOllama is not installed and no bundled version is available. Please install Ollama to use AI features.`;
+        }
+      }
+
       toast({
         title: 'Missing AI Models',
-        description: `The following models are required but not installed:\n${modelList}\n\nPlease install them in Settings > AI Models.`,
+        description,
         variant: 'destructive',
         action: createSettingsAction(onOpenSettings),
       });
