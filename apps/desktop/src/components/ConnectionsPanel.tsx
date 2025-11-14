@@ -4,8 +4,6 @@ import { Button } from '@/components/ui/button';
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
-  DialogTitle,
 } from '@/components/ui/dialog';
 import { ConnectionList } from '@/components/ConnectionList';
 import { ConnectionDialog } from '@/components/ConnectionDialog';
