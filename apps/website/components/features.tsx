@@ -13,6 +13,7 @@ import {
   GitBranch,
   Settings,
   Lock,
+  Cloud,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import Image from "next/image"
@@ -81,6 +82,14 @@ const featuredFeatures = [
     gradient: "from-green-500/20 to-emerald-500/20",
     image: "/images/screenshots/ai-chat.png",
     imageAlt: "Fully local AI chat processing keeping all data private",
+  },
+  {
+    icon: Cloud,
+    title: "S3 & MinIO Bucket Browser",
+    description: "Browse and explore objects in S3-compatible storage buckets including MinIO. Navigate folders, filter objects, upload files, and manage your cloud storage directly from the app with an intuitive file browser interface.",
+    gradient: "from-cyan-500/20 to-blue-500/20",
+    image: "/images/screenshots/minio-bucket-browser.png",
+    imageAlt: "MinIO bucket browser showing folder structure and object management interface",
   },
 ]
 
