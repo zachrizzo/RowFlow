@@ -843,7 +843,7 @@ export function SchemaGraph({
             <p className="text-[11px] text-muted-foreground">
               {totalTables === 0
                 ? 'Loading table metadata...'
-                : 'Drag to reload with more tables'}
+                : `Currently loaded ${loadedTables} table${loadedTables === 1 ? '' : 's'}`}
             </p>
           </div>
 
